@@ -4,9 +4,11 @@ Browser console for the FM-505 UHF RFID module (EPC Gen2 / ISO 18000-6C, 902–9
 on a USB-UART adapter (tested with a CH340 on COM86, 38400 8N1). One HTML file, nothing to install:
 the page talks to the module directly through Web Serial.
 
+**Live:** https://arduino12.github.io/fm505_rfid/ (demo without hardware: [`?sim`](https://arduino12.github.io/fm505_rfid/?sim))
+
 ## Use
 
-1. Open `index.html` in **Chrome or Edge** (desktop). Firefox and Safari have no Web Serial.
+1. Open the live page or `index.html` in **Chrome or Edge** (desktop). Firefox and Safari have no Web Serial.
    Opening the file directly works; `python -m http.server 8552` in this folder serves it at
    http://127.0.0.1:8552/ as well.
 2. Click **Connect** and pick the adapter's port (e.g. *USB-SERIAL CH340 (COM86)*).
