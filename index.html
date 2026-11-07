@@ -1,0 +1,1343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FM-505 RFID Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232a78d6' stroke-width='2' stroke-linecap='round'%3E%3Crect x='3' y='7' width='11' height='10' rx='2'/%3E%3Cpath d='M17 9a4 4 0 0 1 0 6M20 6.5a8 8 0 0 1 0 11'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --surface-2: #f1f0ec; --hover: rgba(11,11,11,.05);
+  --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+  --grid: #e1e0d9;
+  --border: rgba(11,11,11,.10); --border-strong: rgba(11,11,11,.18);
+  --accent: #2a78d6; --accent-soft: rgba(42,120,214,.12); --accent-text: #1c5cab;
+  --good: #0ca30c; --good-soft: rgba(12,163,12,.12); --good-text: #006300;
+  --warn: #fab219; --warn-soft: rgba(250,178,25,.16); --warn-text: #8a5a00;
+  --critical: #d03b3b; --critical-soft: rgba(208,59,59,.10); --critical-text: #a32525;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 6px 24px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --hover: rgba(255,255,255,.06);
+    --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a;
+    --border: rgba(255,255,255,.10); --border-strong: rgba(255,255,255,.18);
+    --accent: #3987e5; --accent-soft: rgba(57,135,229,.16); --accent-text: #86b6ef;
+    --good-soft: rgba(12,163,12,.18); --good-text: #3fc23f;
+    --warn-soft: rgba(250,178,25,.14); --warn-text: #f3c35a;
+    --critical-soft: rgba(208,59,59,.18); --critical-text: #ef8080;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232321; --hover: rgba(255,255,255,.06);
+  --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --grid: #2c2c2a;
+  --border: rgba(255,255,255,.10); --border-strong: rgba(255,255,255,.18);
+  --accent: #3987e5; --accent-soft: rgba(57,135,229,.16); --accent-text: #86b6ef;
+  --good-soft: rgba(12,163,12,.18); --good-text: #3fc23f;
+  --warn-soft: rgba(250,178,25,.14); --warn-text: #f3c35a;
+  --critical-soft: rgba(208,59,59,.18); --critical-text: #ef8080;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.35);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+[hidden] { display: none !important; }
+
+/* top bar */
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap;
+  padding: 10px 24px; border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--page) 88%, transparent); backdrop-filter: blur(10px);
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; flex: none; }
+.title { font-weight: 650; font-size: 15px; letter-spacing: -.01em; }
+.subtitle { color: var(--muted); font-size: 12px; }
+.top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border); font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.pill.ok .dot { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+.pill.busy .dot { background: var(--warn); }
+.pill.bad .dot { background: var(--critical); }
+
+.banner { margin: 16px 24px 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; border: 1px solid; }
+.banner.info { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent-text); }
+.banner.error { background: var(--critical-soft); border-color: color-mix(in srgb, var(--critical) 30%, transparent); color: var(--critical-text); }
+
+/* layout */
+.layout { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 20px; padding: 20px 24px 40px; max-width: 1600px; margin: 0 auto; }
+.side { display: flex; flex-direction: column; gap: 16px; align-self: start; position: sticky; top: 76px; }
+.main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 20px; }
+#logTable td, #logTable th { padding: 6px 8px; }
+#logTable td { font-size: 12px; }
+@media (max-width: 1180px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 920px) {
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 16px; gap: 16px; }
+  .side { position: static; }
+  .topbar { padding: 10px 16px; }
+  .banner { margin: 12px 16px 0; }
+}
+
+/* cards */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); padding: 16px; min-width: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.card h2 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-2); }
+.card h3 { margin: 14px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+
+/* controls */
+button, select, input { font: inherit; color: inherit; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 520; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--hover); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #000); }
+.btn.go { background: var(--good); border-color: var(--good); color: #fff; }
+.btn.stop { background: var(--critical); border-color: var(--critical); color: #fff; }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12.5px; }
+.btn.icon { width: 32px; padding: 0; }
+select, input[type=text], input[type=number] {
+  height: 32px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); min-width: 0;
+}
+select:focus, input:focus, .btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 1px; }
+input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+label.check { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field > span { font-size: 12px; color: var(--muted); }
+.row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.row .grow { flex: 1 1 140px; }
+.row .grow > select, .row .grow > input { width: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; height: 32px; }
+.seg button { border: 0; background: transparent; padding: 0 12px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.seg button + button { border-left: 1px solid var(--border-strong); }
+.seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+.seg button:disabled { cursor: not-allowed; opacity: .5; }
+
+/* key/values */
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+
+.setting { padding: 10px 0; border-top: 1px solid var(--border); }
+.setting:first-of-type { border-top: 0; padding-top: 0; }
+.setting .row select { flex: 1 1 120px; }
+
+.gpio { width: 100%; border-collapse: collapse; font-size: 13px; }
+.gpio th, .gpio td { padding: 4px 6px; text-align: center; }
+.gpio th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.gpio td:first-child, .gpio th:first-child { text-align: left; padding-left: 0; }
+
+/* inventory */
+.inv-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.inv-controls .field select, .inv-controls .field input { width: 100%; }
+.inv-actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.tiles { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+@media (max-width: 1180px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; min-width: 0; }
+.tile .lbl { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.tile .val { font-size: 22px; font-weight: 640; letter-spacing: -.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* tables */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th {
+  position: sticky; top: 0; background: var(--surface-2); text-align: left; font-weight: 600;
+  font-size: 12px; color: var(--ink-2); padding: 8px 10px; white-space: nowrap; border-bottom: 1px solid var(--border);
+}
+table.data th.sortable { cursor: pointer; user-select: none; }
+table.data th.sortable:hover { color: var(--ink); }
+table.data th .arrow { color: var(--accent); margin-left: 3px; }
+table.data td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
+table.data tr:last-child td { border-bottom: 0; }
+table.data td.r, table.data th.r { text-align: right; }
+#tagsTable tbody tr { cursor: pointer; }
+#tagsTable tbody tr:hover td { background: var(--hover); }
+#tagsTable tbody tr.sel td { background: var(--accent-soft); }
+#tagsTable tbody tr.flash td { animation: flash .6s ease-out; }
+@keyframes flash { from { background: var(--good-soft); } to { background: transparent; } }
+.epc { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12.5px; letter-spacing: .01em; }
+.epc-sub { font-size: 11px; color: var(--muted); }
+.tm { font-size: 12.5px; }
+.fresh { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--grid); }
+.fresh.live { background: var(--good); box-shadow: 0 0 0 3px var(--good-soft); }
+.fresh.recent { background: color-mix(in srgb, var(--good) 45%, var(--grid)); }
+.empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; white-space: normal !important; }
+.scroll { max-height: 340px; overflow-y: auto; }
+.tags-scroll { max-height: 520px; overflow: auto; }
+
+/* memory */
+.mem-target { padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.mem-out { margin-top: 10px; padding: 10px; border-radius: 8px; background: var(--surface-2); min-height: 42px; font-size: 12.5px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.mem-out .ok { color: var(--good-text); }
+.mem-out .err { color: var(--critical-text); }
+.quick { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+/* console */
+.console-log { height: 260px; overflow-y: auto; background: var(--surface-2); border-radius: 10px; padding: 8px 10px; font-size: 12.5px; }
+.console-log .ln { display: grid; grid-template-columns: 92px 18px minmax(0, 1fr) auto; gap: 6px; padding: 1px 0; }
+.console-log .ln .t { color: var(--muted); }
+.console-log .ln .d { color: var(--muted); text-align: center; }
+.console-log .ln .x { overflow-wrap: anywhere; }
+.console-log .ln.tx .x { color: var(--accent-text); }
+.console-log .ln.err .x { color: var(--critical-text); }
+.console-log .ln.note .x { color: var(--muted); font-style: italic; }
+.console-log .ln .ms { color: var(--muted); }
+.console-form { display: flex; gap: 8px; margin-top: 10px; }
+.console-form input { flex: 1; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.chip { border: 1px solid var(--border-strong); background: transparent; border-radius: 999px; padding: 2px 10px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
+.chip:hover:not(:disabled) { background: var(--hover); }
+.chip:disabled { opacity: .45; cursor: not-allowed; }
+
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0;
+  background: var(--ink); color: var(--page); padding: 9px 16px; border-radius: 10px; font-size: 13px;
+  transition: opacity .2s, transform .2s; pointer-events: none; z-index: 50; max-width: calc(100vw - 32px);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.err { background: var(--critical); color: #fff; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo" aria-hidden="true">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="7" width="11" height="10" rx="2"/><path d="M17 9a4 4 0 0 1 0 6M20 6.5a8 8 0 0 1 0 11"/></svg>
+    </div>
+    <div>
+      <div class="title">FM-505 RFID Console</div>
+      <div class="subtitle">UHF EPC Gen2 / ISO 18000-6C reader · Web Serial</div>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="pill" id="connPill"><span class="dot"></span><span id="connText">Disconnected</span></span>
+    <select id="baudSel" title="Serial baud rate the page opens the port with (module default 38400)"></select>
+    <button class="btn primary" id="connectBtn">Connect</button>
+    <button class="btn icon" id="themeBtn" title="Toggle light / dark" aria-label="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>
+    </button>
+  </div>
+</header>
+<div id="banner" class="banner" hidden></div>
+
+<div class="layout">
+  <aside class="side">
+    <section class="card">
+      <div class="card-head">
+        <h2>Reader</h2>
+        <button class="btn sm" id="refreshBtn" data-conn>Refresh</button>
+      </div>
+      <dl class="kv">
+        <dt>Port</dt><dd id="infoPort" class="mono">–</dd>
+        <dt>Firmware</dt><dd id="infoFw" class="mono">–</dd>
+        <dt>Hardware</dt><dd id="infoHw" class="mono">–</dd>
+        <dt>Reader ID</dt><dd id="infoId" class="mono">–</dd>
+        <dt>TX power</dt><dd id="infoPower">–</dd>
+        <dt>Region</dt><dd id="infoRegion">–</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Settings</h2></div>
+      <div class="setting">
+        <div class="field"><span>TX power (N1)</span></div>
+        <div class="row">
+          <select id="powerSel" data-conn></select>
+          <button class="btn" id="powerApply" data-conn>Apply</button>
+        </div>
+        <p class="hint">−2 to 25 dBm. Lower power shortens range, which helps when you only want tags right at the antenna.</p>
+      </div>
+      <div class="setting">
+        <div class="field"><span>Region / frequency band (N5)</span></div>
+        <div class="row">
+          <select id="regionSel" data-conn></select>
+          <button class="btn" id="regionApply" data-conn>Apply</button>
+        </div>
+        <p class="hint">The antenna is tuned for 902–928 MHz. Use the band that is allowed where you operate.</p>
+      </div>
+      <div class="setting">
+        <div class="field"><span>Module UART baud rate (NA)</span></div>
+        <div class="row">
+          <select id="moduleBaudSel" data-conn></select>
+          <button class="btn" id="baudApply" data-conn>Apply</button>
+        </div>
+        <p class="hint">The page reconnects at the new rate. If contact is lost, pick the rate in the top bar.</p>
+      </div>
+      <div class="setting">
+        <div class="card-head" style="margin-bottom:6px">
+          <div class="field"><span>GPIO (N6–N9)</span></div>
+          <div class="row">
+            <button class="btn sm" id="gpioRead" data-conn>Read</button>
+            <button class="btn sm" id="gpioApply" data-conn>Apply</button>
+          </div>
+        </div>
+        <table class="gpio">
+          <thead><tr><th>Pin</th><th>Output</th><th>High</th></tr></thead>
+          <tbody id="gpioBody"></tbody>
+        </table>
+        <p class="hint">Inputs show the level last read; outputs take the High setting on Apply.</p>
+      </div>
+    </section>
+  </aside>
+
+  <main class="main">
+    <section class="card">
+      <div class="card-head">
+        <h2>Inventory</h2>
+        <label class="check"><input type="checkbox" id="beepChk"> Beep on new tag</label>
+      </div>
+      <div class="inv-controls">
+        <div class="field">
+          <span>Mode</span>
+          <div class="seg" id="modeSeg">
+            <button type="button" data-mode="multi" aria-pressed="true" title="U command: anti-collision, many tags per round">Multi-tag</button>
+            <button type="button" data-mode="single" aria-pressed="false" title="Q command: one tag; fails when several answer at once">Single tag</button>
+          </div>
+        </div>
+        <div class="field" id="slotField" style="width:130px">
+          <span>Slots (Q)</span>
+          <select id="slotSel"></select>
+        </div>
+        <div class="field" style="width:170px">
+          <span>Also read per tag</span>
+          <select id="bankSel">
+            <option value="">Nothing (EPC only)</option>
+            <option value="2" selected>TID bank</option>
+            <option value="3">User bank</option>
+            <option value="1">EPC bank</option>
+            <option value="0">Reserved bank</option>
+          </select>
+        </div>
+        <div class="field" id="bankAddrField" style="width:72px">
+          <span>Word</span>
+          <input type="number" id="bankAddr" min="0" max="16383" value="0">
+        </div>
+        <div class="field" id="bankLenField" style="width:72px">
+          <span>Words</span>
+          <input type="number" id="bankLen" min="1" max="32" value="6">
+        </div>
+        <div class="field" style="width:96px">
+          <span>Pause (ms)</span>
+          <input type="number" id="intervalInp" min="0" max="10000" step="10" value="0">
+        </div>
+        <div class="inv-actions">
+          <button class="btn" id="onceBtn" data-conn>Read once</button>
+          <button class="btn go" id="runBtn" data-conn>Start</button>
+        </div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="lbl">Tags</div><div class="val num" id="stTags">0</div><div class="sub" id="stTagsSub">unique EPCs</div></div>
+        <div class="tile"><div class="lbl">Reads</div><div class="val num" id="stReads">0</div><div class="sub" id="stReadsSub">total</div></div>
+        <div class="tile"><div class="lbl">Reads / s</div><div class="val num" id="stRate">–</div><div class="sub">last 5 s</div></div>
+        <div class="tile"><div class="lbl">Rounds</div><div class="val num" id="stRounds">0</div><div class="sub" id="stRoundsSub">–</div></div>
+        <div class="tile"><div class="lbl">Round time</div><div class="val num" id="stRound">–</div><div class="sub" id="stRoundSub">last · avg</div></div>
+        <div class="tile"><div class="lbl">Running</div><div class="val num" id="stElapsed">–</div><div class="sub" id="stErrors">0 CRC errors</div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Tags</h2>
+        <div class="row">
+          <button class="btn sm" id="exportTagsBtn">Export CSV</button>
+          <button class="btn sm" id="clearBtn">Clear</button>
+        </div>
+      </div>
+      <div class="table-wrap tags-scroll">
+        <table class="data" id="tagsTable">
+          <thead><tr id="tagsHead"></tr></thead>
+          <tbody id="tagsBody"></tbody>
+        </table>
+      </div>
+      <p class="hint">Click a tag to target it in Tag memory. Times are this computer's clock. The reader gives no RSSI.</p>
+    </section>
+
+    <div class="grid2">
+      <section class="card">
+        <div class="card-head">
+          <h2>Read log</h2>
+          <div class="row">
+            <span class="muted" id="logCount" style="font-size:12px"></span>
+            <button class="btn sm" id="exportReadsBtn">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap scroll">
+          <table class="data" id="logTable">
+            <thead><tr><th>Time</th><th>EPC</th><th id="logDataHead">Data</th><th class="r">Round</th></tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Tag memory</h2></div>
+        <div class="mem-target" id="memTarget"></div>
+        <div class="row">
+          <div class="field grow">
+            <span>Bank</span>
+            <select id="memBank">
+              <option value="2">TID (2)</option>
+              <option value="3">User (3)</option>
+              <option value="1">EPC (1)</option>
+              <option value="0">Reserved (0): passwords</option>
+            </select>
+          </div>
+          <div class="field" style="width:76px"><span>Word</span><input type="number" id="memAddr" min="0" max="16383" value="0"></div>
+          <div class="field" style="width:76px"><span>Words</span><input type="number" id="memLen" min="1" max="32" value="6"></div>
+          <button class="btn" id="memRead" data-conn>Read</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="field grow"><span>Write data (hex, 4 digits per word)</span><input type="text" id="memData" class="mono" placeholder="e.g. 1234ABCD" spellcheck="false" autocomplete="off"></div>
+          <button class="btn" id="memWrite" data-conn>Write</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="field grow"><span>New EPC (hex)</span><input type="text" id="newEpc" class="mono" placeholder="e.g. 000000000000000000000001" spellcheck="false" autocomplete="off"></div>
+          <button class="btn" id="epcWrite" data-conn>Write EPC</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="field" style="width:130px"><span>Access password</span><input type="text" id="memPwd" class="mono" placeholder="none" maxlength="8" spellcheck="false" autocomplete="off"></div>
+          <div class="field" style="width:76px"><span>Attempts</span><input type="number" id="memTries" min="1" max="20" value="5"></div>
+          <label class="check" style="height:32px"><input type="checkbox" id="memSelect" checked> Select by EPC (T)</label>
+        </div>
+        <div class="quick">
+          <button class="chip" data-quick="2,0,6" data-conn>TID</button>
+          <button class="chip" data-quick="1,0,8" data-conn>EPC bank</button>
+          <button class="chip" data-quick="3,0,8" data-conn>User 0–7</button>
+          <button class="chip" data-quick="0,0,4" data-conn>Passwords</button>
+        </div>
+        <div class="mem-out mono" id="memOut"><span class="muted">Results appear here.</span></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Console</h2>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="showInvChk"> Show inventory traffic</label>
+          <button class="btn sm" id="consoleClear">Clear</button>
+        </div>
+      </div>
+      <div class="console-log mono" id="consoleLog"></div>
+      <form class="console-form" id="consoleForm" autocomplete="off">
+        <input type="text" id="consoleInput" class="mono" placeholder="Command without &lt;LF&gt;/&lt;CR&gt;, e.g. V, U3, R2,0,6" spellcheck="false" data-conn>
+        <button class="btn primary" type="submit" data-conn>Send</button>
+      </form>
+      <div class="chips">
+        <button class="chip" data-cmd="V" data-conn>V version</button>
+        <button class="chip" data-cmd="S" data-conn>S reader ID</button>
+        <button class="chip" data-cmd="Q" data-conn>Q one EPC</button>
+        <button class="chip" data-cmd="U3" data-conn>U3 multi EPC</button>
+        <button class="chip" data-cmd="U3,R2,0,6" data-conn>U3,R2,0,6 EPC+TID</button>
+        <button class="chip" data-cmd="N0,00" data-conn>N0 power</button>
+        <button class="chip" data-cmd="N4,00" data-conn>N4 region</button>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// index.html?sim swaps Web Serial for a simulated FM-505 (sim.js), for UI work without hardware
+if (/[?&]sim\b/.test(location.search)) document.write('<script src="sim.js"><\/script>');
+</script>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const serial = window.fm505Sim || navigator.serial;
+
+// ---------- protocol constants (vendor "FM-503 command format", checked on firmware D29B) ----------
+const REGIONS = {
+  '01': 'US 902–928 MHz', '02': 'TW 922–928 MHz', '03': 'CN 920–925 MHz', '04': 'CN2 840–845 MHz',
+  '05': 'EU 865–868 MHz', '06': 'JP 916–921 MHz', '07': 'KR 917–921 MHz', '08': 'VN 918–923 MHz',
+  '09': 'EU2 916–920 MHz', '0A': 'IN 865–867 MHz',
+};
+const BAUDS = [4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400];   // NA,<index>
+const TAG_ERRORS = {
+  '0': 'other error', '3': 'memory overrun (address or length past the end of the bank)', '4': 'memory locked',
+  'B': 'insufficient power (move the tag closer)', 'E': 'reader error E (undocumented)', 'F': 'non-specific error',
+};
+const BANK_NAMES = { 0: 'Reserved', 1: 'EPC', 2: 'TID', 3: 'User' };
+const GPIO_PINS = [{ pin: 10, bit: 4 }, { pin: 11, bit: 2 }, { pin: 14, bit: 1 }];
+// GS1 mask designer IDs → [manufacturer, {tag model number: chip}], from the GS1 MDID list (2023-10)
+const MDID = {"001":["Impinj",{"170":"Monza R6-P","10C":"Monza 4E","105":"Monza 4QT","160":"Monza R6","130":"Monza 5","191":"M730","190":"M750","171":"Monza R6-A/Monza R6-B","114":"Monza 4i","100":"Monza 4D","150":"Monza X-8K","140":"Monza X-2K"}],"002":["Texas Instruments",{}],"003":["Alien Technology",{"411":"Higgs 2","412":"Higgs 3","414":"Higgs 4","811":"Higgs EC"}],"004":["Intelleflex",{}],"005":["Atmel",{}],"006":["NXP Semiconductors",{"001":"G2","003":"G2 XM","004":"G2 XL","806":"G2 iL","807":"G2 iL+","80A":"G2 iM","80B":"G2 iM+","810":"UCODE 7","811":"UCODE 7m","812":"UCODE 7xm","D12":"UCODE 7xm","D92":"UCODE 7xm+","C12":"UCODE DNA TRACK","F92":"UCODE DNA","894":"UCODE 8","994":"UCODE8m","995":"UCODE9"}],"007":["ST Microelectronics",{"240":"XRAG2"}],"008":["EP Microelectronics",{}],"009":["Motorola (formerly Symbol Technologies)",{}],"00A":["Sentech Snd Bhd",{}],"00B":["EM Microelectronic",{"000":"EM4324","001":"EM4324","002":"EM4324","003":"EM4324","040":"EM4325","041":"EM4325","042":"EM4325","043":"EM4325","044":"EM4325","045":"EM4325","046":"EM4325","047":"EM4325","048":"EM4325","049":"EM4325","04A":"EM4325","04B":"EM4325","04C":"EM4325","04D":"EM4325","04E":"EM4325","04F":"EM4325","080":"EM4124","081":"EM4124","082":"EM4124","083":"EM4124","084":"EM4124","085":"EM4124","086":"EM4124","087":"EM4124","088":"EM4124","089":"EM4124","08A":"EM4124","08B":"EM4124","08C":"EM4124","08D":"EM4124","08E":"EM4124","08F":"EM4124","0A0":"EM4423","0A1":"EM4423","0A2":"EM4423","0A3":"EM4423","0A4":"EM4423","0A5":"EM4423","0A6":"EM4423","0A7":"EM4423","0C0":"EM4126","0C1":"EM4126","0C2":"EM4126","0C3":"EM4126","0C4":"EM4126","0C5":"EM4126","0C6":"EM4126","0C7":"EM4126","100":"EM4227","101":"EM4227","102":"EM4227","103":"EM4227","104":"EM4227","105":"EM4227","106":"EM4227","107":"EM4227","110":"EM4425","111":"EM4425","112":"EM4425","113":"EM4425","114":"EM4425","115":"EM4425","116":"EM4425","117":"EM4425","118":"EM4425","119":"EM4425","11A":"EM4425","11B":"EM4425","11C":"EM4425","11D":"EM4425","11E":"EM4425","11F":"EM4425","120":"EM4152","121":"EM4152","122":"EM4152","123":"EM4152"}],"00C":["Renesas Technology Corp.",{}],"00D":["Mstar",{}],"00E":["Tyco International",{}],"00F":["Quanray Electronics",{}],"010":["Fujitsu",{}],"011":["LSIS",{}],"012":["CAEN RFID srl",{}],"013":["Productivity Engineering Gesellschaft fuer IC Design mbH",{}],"014":["Federal Electric Corp.",{}],"015":["ON Semiconductor",{}],"016":["Ramtron",{}],"017":["Tego",{}],"018":["Ceitec S.A.",{}],"019":["CPA Wernher von Braun",{}],"01A":["TransCore",{}],"01B":["Nationz",{}],"01C":["Invengo",{}],"01D":["Kiloway",{}],"01E":["Longjing Microelectronics Co. Ltd.",{}],"01F":["Chipus Microelectronics",{}],"020":["ORIDAO",{}],"021":["Maintag",{}],"022":["Yangzhou Daoyuan Microelectronics Co. Ltd",{}],"023":["Gate Elektronik",{}],"024":["RFMicron, Inc.",{}],"025":["RST-Invent LLC",{}],"026":["Crystone Technology",{}],"027":["Shanghai Fudan Microelectronics Group",{}],"028":["Farsens",{}],"029":["Giesecke & Devrient GmbH",{}],"02A":["AWID",{}],"02B":["Unitec Semicondutores S/A",{}],"02C":["Q-Free ASA",{}],"02D":["Valid S.A.",{}],"02E":["Fraunhofer IPMS",{}],"02F":["ams AG",{}],"030":["Angstrem JSC",{}],"031":["Honeywell",{"000":"IT70","001":"IT70","002":"IT70","003":"IT70","004":"IT70","005":"IT70","006":"IT70","007":"IT70","008":"IT70","009":"IT70","00A":"IT70","00B":"IT70","00C":"IT70","00D":"IT70","00E":"IT70","00F":"IT70"}],"032":["Huada Semiconductor Co. Ltd (HDSC)",{}],"033":["Lapis Technology Co., Ltd.",{}],"034":["PJSC Mikron",{}],"035":["Hangzhou Landa Microelectronics Co., Ltd.",{}],"036":["Nanjing NARI Micro-Electronic Technology Co., Ltd.",{}],"037":["Southwest Integrated Circuit design Co., Ltd.",{}],"038":["Silictec",{}],"039":["Nation RFID",{}],"03A":["Asygn",{}],"03B":["Suzhou HCTech Technology Co., Ltd.",{}],"03C":["AXEM Technology",{}],"03D":["Guangzhou Syschip Technology Co., Ltd",{}],"03E":["MaxWave Microelectronics Ltd.",{}],"03F":["IDRO Co., Ltd",{}],"040":["Shanxi Zhongshuo Microelectronics Co., Ltd.",{}],"041":["Beijing Smartchip Microelectronics Technology Company Limited",{}],"042":["Shanghai Yilian Internet of Things Co., Ltd.",{}],"043":["T-Head Semiconductor Co., Ltd.",{}],"044":["P&M Information Technology (Shenzhen) Co.,Ltd.",{}],"045":["Brompton Technologies Pte Ltd.",{}],"046":["Along Star Technology (Hangzhou) Co., Ltd.",{}],"047":["3ALogics Inc.",{}],"048":["Onecent Technology (Singapore) Pte. Ltd.",{}],"049":["Silicon Craft Technology Public Company Limited",{}],"04A":["Huada Evercore Co.,LTD",{}]};
+
+// ---------- small helpers ----------
+const hex = (n, w = 1) => n.toString(16).toUpperCase().padStart(w, '0');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+function fmtTime(t) {
+  const d = new Date(t);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+}
+function fmtAgo(ms) {
+  if (ms < 1000) return 'now';
+  if (ms < 60000) return (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + ' s';
+  if (ms < 3600000) return Math.floor(ms / 60000) + ' min';
+  return Math.floor(ms / 3600000) + ' h';
+}
+function fmtDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  return s < 60 ? s + ' s' : s < 3600 ? `${Math.floor(s / 60)}:${pad(s % 60)}` : `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`;
+}
+const groupWords = h => h.replace(/(.{4})(?=.)/g, '$1 ');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fm505.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('fm505.' + k, JSON.stringify(v)); } catch {} },
+};
+let toastTimer;
+function toast(msg, err = false) {
+  const el = $('toast');
+  el.textContent = msg; el.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.className = 'toast' + (err ? ' err' : ''), err ? 4500 : 2500);
+}
+function banner(msg, kind = 'info') {
+  const el = $('banner');
+  if (!msg) { el.hidden = true; return; }
+  el.className = 'banner ' + kind; el.textContent = msg; el.hidden = false;
+}
+
+// EPC CRC-16 (ISO/IEC 13239: poly 0x1021, init 0xFFFF, output inverted) over PC+EPC
+function crc16(h) {
+  let c = 0xFFFF;
+  for (let i = 0; i < h.length; i += 2) {
+    c ^= parseInt(h.substr(i, 2), 16) << 8;
+    for (let k = 0; k < 8; k++) c = c & 0x8000 ? ((c << 1) ^ 0x1021) & 0xFFFF : (c << 1) & 0xFFFF;
+  }
+  return c ^ 0xFFFF;
+}
+// TID words 0-1: E2 class, XTID/S/F bits, 9-bit mask designer ID, 12-bit tag model number
+function decodeTid(t) {
+  if (!t || t.length < 8 || !t.startsWith('E2')) return null;
+  const w = parseInt(t.slice(2, 8), 16), mdid = hex((w >> 12) & 0x1FF, 3), tmn = hex(w & 0xFFF, 3);
+  const m = MDID[mdid];
+  return { maker: m ? m[0] : 'MDID ' + mdid, model: m && m[1][tmn] ? m[1][tmn] : 'model ' + tmn };
+}
+const errText = c => TAG_ERRORS[c] || 'error ' + c;
+
+// ---------- serial transport ----------
+// Commands go out as <LF>cmd<CR>; replies come back as <LF>reply<CR><LF>. U (multi-tag) replies one
+// line per tag and ends with a bare "U". Only one command is in flight; exclusive() serializes them so
+// T/P (one-shot selects) stay glued to the command they prepare.
+const enc = new TextEncoder();
+let port = null, reader = null, writer = null, readDone = null, closing = false, rxBuf = '', pending = null;
+let chain = Promise.resolve();
+
+function exclusive(fn) {
+  const job = chain.then(() => fn(tx));
+  chain = job.catch(() => {});
+  return job;
+}
+const xfer = (cmd, opts) => exclusive(t => t(cmd, opts));
+
+function slotTimeout(cmd) {
+  const m = /^U(\d+)?/.exec(cmd);
+  return m ? 1500 + 25 * 2 ** (+(m[1] || 0)) : 1200;
+}
+function tx(cmd, { quiet = false, timeout } = {}) {
+  if (!writer) return Promise.reject(new Error('Not connected'));
+  return new Promise((resolve, reject) => {
+    const p = { cmd, multi: cmd[0] === 'U', lines: [], quiet, t0: performance.now(), resolve };
+    p.timer = setTimeout(() => finish(true), timeout ?? slotTimeout(cmd));
+    pending = p;
+    if (!quiet || $('showInvChk').checked) logLine('tx', cmd);
+    writer.write(enc.encode('\n' + cmd + '\r')).catch(e => {
+      if (pending === p) { clearTimeout(p.timer); pending = null; }
+      reject(e);
+    });
+  });
+}
+function accepts(cmd, s) {
+  const c = cmd[0];
+  return s[0] === c || s === 'X' || ('RWKL'.includes(c) && /^[0-9A-FZ]/.test(s));
+}
+function onLine(s, t) {
+  const p = pending;
+  if (p) {
+    if (p.multi) {
+      if (s === 'U' || s === 'X') { p.end = s; return finish(false); }
+      if (s[0] === 'U') { p.lines.push({ s, t }); return; }
+    } else if (accepts(p.cmd, s)) { p.lines.push({ s, t }); return finish(false); }
+  }
+  unsolicited(s, t);
+}
+function finish(timedOut) {
+  const p = pending;
+  if (!p) return;
+  pending = null; clearTimeout(p.timer);
+  const ms = performance.now() - p.t0;
+  const show = !p.quiet || $('showInvChk').checked;
+  if (show) {
+    for (const l of p.lines) logLine('rx', l.s);
+    if (p.multi && p.end) logLine('rx', p.end, ms);
+    else if (timedOut) logLine('err', 'no reply (timeout)', ms);
+    else setLastMs(ms);
+  }
+  p.resolve({ cmd: p.cmd, lines: p.lines, line: p.lines[0]?.s ?? null, ms, timedOut, rejected: p.end === 'X' || p.lines[0]?.s === 'X' });
+}
+function onRx(text) {
+  rxBuf += text;
+  let i;
+  while ((i = rxBuf.indexOf('\r')) >= 0) {
+    const s = rxBuf.slice(0, i).replace(/\n/g, '');
+    rxBuf = rxBuf.slice(i + 1);
+    if (s) onLine(s, Date.now());
+  }
+  if (rxBuf.length > 4096) rxBuf = rxBuf.slice(-1024);
+}
+// lines nobody asked for: late replies, or G2 runs started by the module's external button
+function unsolicited(s, t) {
+  logLine('rx', s + '   (unsolicited)');
+  const tag = parseTagLine(s);
+  if (tag) { recordRead(tag, t, null, null); scheduleRender(); }
+}
+
+async function readLoop(p) {
+  const dec = new TextDecoder();
+  while (p.readable && !closing) {
+    reader = p.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        onRx(dec.decode(value, { stream: true }));
+      }
+    } catch (e) {
+      if (!closing) logLine('err', 'serial: ' + e.message);
+    } finally {
+      try { reader.releaseLock(); } catch {}
+    }
+  }
+  reader = null;
+  if (!closing) lostPort();
+}
+
+function portLabel(p) {
+  const i = p.getInfo ? p.getInfo() : {};
+  if (i.usbVendorId === undefined) return 'serial port';
+  const known = { '1A86:7523': 'CH340', '1A86:55D4': 'CH9102', '10C4:EA60': 'CP210x', '0403:6001': 'FT232R', '067B:2303': 'PL2303' };
+  const id = hex(i.usbVendorId, 4) + ':' + hex(i.usbProductId, 4);
+  return known[id] ? `${known[id]} (${id})` : 'USB ' + id;
+}
+
+async function openPort(p, baud) {
+  baud = baud || +$('baudSel').value;
+  setStatus('busy', 'Opening…');
+  try {
+    await p.open({ baudRate: baud, dataBits: 8, stopBits: 1, parity: 'none', bufferSize: 8192 });
+  } catch (e) {
+    setStatus('bad', 'Disconnected');
+    const busy = /open|access|use/i.test(e.message);
+    banner(busy ? `Could not open the port: ${e.message}. Is another program (serial monitor, vendor utility) using it?` : 'Could not open the port: ' + e.message, 'error');
+    return false;
+  }
+  port = p; closing = false; rxBuf = '';
+  writer = p.writable.getWriter();
+  readDone = readLoop(p);
+  const info = p.getInfo ? p.getInfo() : {};
+  store.set('lastPort', { v: info.usbVendorId, p: info.usbProductId });
+  store.set('baud', baud);
+  $('baudSel').value = String(baud);
+  $('infoPort').textContent = `${portLabel(p)} @ ${baud}`;
+  setConnected(true);
+  banner(window.fm505Sim ? 'Simulation mode: a fake FM-505 with a few tags that come and go. Remove ?sim from the URL for real hardware.' : '');
+  logLine('note', `opened ${portLabel(p)} at ${baud} baud`);
+  const ok = await loadReaderInfo();
+  if (!ok) banner(`The port is open but the reader does not answer at ${baud} baud. Check TX/RX wiring and power, or try another baud rate in the top bar.`, 'error');
+  return ok;
+}
+
+async function closePort() {
+  stopInventory();
+  closing = true;
+  if (pending) finish(true);
+  try { await reader?.cancel(); } catch {}
+  try { await readDone; } catch {}
+  try { writer?.releaseLock(); } catch {}
+  try { await port?.close(); } catch {}
+  port = null; writer = null; reader = null;
+}
+async function disconnect() {
+  await closePort();
+  setConnected(false);
+  logLine('note', 'disconnected');
+}
+async function lostPort() {
+  await closePort();
+  setConnected(false);
+  banner('The reader disconnected. It reconnects automatically when plugged back in.', 'error');
+  logLine('err', 'port lost');
+}
+
+async function connectClick() {
+  if (port) return disconnect();
+  if (!serial) return;
+  let p;
+  try { p = await serial.requestPort(); }
+  catch (e) { if (e.name !== 'NotFoundError') banner('Port selection failed: ' + e.message, 'error'); return; }
+  await openPort(p);
+}
+
+function setStatus(kind, text) {
+  $('connPill').className = 'pill ' + kind;
+  $('connText').textContent = text;
+}
+function setConnected(on) {
+  document.querySelectorAll('[data-conn]').forEach(el => el.disabled = !on);
+  $('connectBtn').textContent = on ? 'Disconnect' : 'Connect';
+  $('connectBtn').classList.toggle('primary', !on);
+  $('baudSel').disabled = on;
+  if (on) setStatus('ok', window.fm505Sim ? 'Simulated reader' : 'Connected');
+  else {
+    setStatus('', 'Disconnected');
+    for (const id of ['infoFw', 'infoHw', 'infoId', 'infoPower', 'infoRegion', 'infoPort']) $(id).textContent = '–';
+  }
+  updateRunUi();
+  renderMemTarget();
+  scheduleRender();
+}
+
+// ---------- reader info & settings ----------
+function powerLabel(v) {
+  const n = parseInt(v, 16);
+  return n <= 0x1B ? `${n - 2} dBm` : `${v} (factory, not in dBm table)`;
+}
+function setPowerUi(v) {
+  const sel = $('powerSel');
+  if (![...sel.options].some(o => o.value === v)) {
+    const o = new Option(`${v}: factory value`, v);
+    sel.add(o);
+  }
+  sel.value = v;
+  $('infoPower').textContent = powerLabel(v);
+}
+function setRegionUi(v) {
+  const sel = $('regionSel');
+  if (!REGIONS[v] && ![...sel.options].some(o => o.value === v)) sel.add(new Option(`${v}: unknown`, v));
+  sel.value = v;
+  $('infoRegion').textContent = REGIONS[v] ? `${v} · ${REGIONS[v]}` : v;
+}
+const nValue = r => (r && !r.timedOut && /^N[0-9A-F]+$/.test(r.line)) ? r.line.slice(1) : null;
+
+async function loadReaderInfo() {
+  let v, s, n0, n4;
+  try {
+    [v, s, n0, n4] = await exclusive(async t => [await t('V'), await t('S'), await t('N0,00'), await t('N4,00')]);
+  } catch (e) { return false; }
+  if (v.timedOut && s.timedOut) return false;
+  const vm = /^V([^,]*),([^,]*),([^,]*),?(.*)$/.exec(v.line || '');
+  if (vm) { $('infoFw').textContent = vm[1]; $('infoHw').textContent = vm[3]; $('infoId').textContent = vm[2]; }
+  if (/^S[0-9A-F]+$/.test(s.line || '')) $('infoId').textContent = s.line.slice(1);
+  const pw = nValue(n0), rg = nValue(n4);
+  if (pw) setPowerUi(pw);
+  if (rg) setRegionUi(rg);
+  await readGpio(true);
+  return true;
+}
+
+async function applyPower() {
+  const v = $('powerSel').value;
+  const r = await xfer('N1,' + v).catch(e => null);
+  // the manual says the module restarts without replying; firmware D29B echoes N<value> instead
+  if (r && r.timedOut) await sleep(800);
+  const now = nValue(await xfer('N0,00').catch(() => null));
+  if (now) setPowerUi(now);
+  now === v ? toast('TX power set to ' + powerLabel(v)) : toast('Power not confirmed (reader reports ' + (now || 'nothing') + ')', true);
+}
+async function applyRegion() {
+  const v = $('regionSel').value;
+  const r = await xfer('N5,' + v).catch(() => null);
+  if (r && r.timedOut) await sleep(800);
+  const now = nValue(await xfer('N4,00').catch(() => null));
+  if (now) setRegionUi(now);
+  now === v ? toast('Region set to ' + REGIONS[v]) : toast('Region not confirmed (reader reports ' + (now || 'nothing') + ')', true);
+}
+async function applyBaud() {
+  const idx = +$('moduleBaudSel').value, baud = BAUDS[idx], cur = port && +$('baudSel').value;
+  if (baud === cur) return toast('The module already runs at ' + baud);
+  if (!confirm(`Change the module's UART to ${baud} baud?\n\nThe page reconnects at ${baud}. If the reader stops answering, pick its rate in the top bar and connect again.`)) return;
+  const p = port, wasRunning = inv.running;
+  const r = await xfer('NA,' + idx).catch(() => null);
+  if (!r || r.timedOut || r.rejected) return toast('The reader did not accept the baud change', true);
+  await sleep(150);
+  await closePort();
+  const ok = await openPort(p, baud);
+  ok ? toast('Now talking at ' + baud + ' baud') : toast('No answer at ' + baud + ' baud', true);
+  if (ok && wasRunning) startInventory();
+}
+
+function renderGpio(dir = 0, lvl = 0) {
+  $('gpioBody').innerHTML = GPIO_PINS.map(g => `<tr>
+    <td>Pin ${g.pin}</td>
+    <td><input type="checkbox" data-gdir="${g.bit}" ${dir & g.bit ? 'checked' : ''} data-conn ${port ? '' : 'disabled'} aria-label="Pin ${g.pin} output"></td>
+    <td><input type="checkbox" data-glvl="${g.bit}" ${lvl & g.bit ? 'checked' : ''} data-conn ${port ? '' : 'disabled'} aria-label="Pin ${g.pin} high"></td>
+  </tr>`).join('');
+}
+async function readGpio(quietly) {
+  const [d, l] = await exclusive(async t => [await t('N6,00'), await t('N8,00')]).catch(() => [null, null]);
+  const dir = nValue(d), lvl = nValue(l);
+  if (dir === null || lvl === null) { if (!quietly) toast('GPIO read failed', true); return; }
+  renderGpio(parseInt(dir, 16), parseInt(lvl, 16));
+  if (!quietly) toast('GPIO read');
+}
+async function applyGpio() {
+  let dir = 0, lvl = 0;
+  document.querySelectorAll('[data-gdir]').forEach(c => { if (c.checked) dir |= +c.dataset.gdir; });
+  document.querySelectorAll('[data-glvl]').forEach(c => { if (c.checked) lvl |= +c.dataset.glvl; });
+  await exclusive(async t => {
+    await t('N7,7' + dir);            // mask 7 = all three pins, then the output bits
+    if (dir) await t(`N9,${dir}${lvl & dir}`);
+  }).catch(() => {});
+  await readGpio(true);
+  toast('GPIO applied');
+}
+
+// ---------- inventory ----------
+const inv = {
+  mode: store.get('mode', 'multi'), running: false, startedAt: 0, stoppedAt: 0,
+  rounds: 0, roundMsSum: 0, lastRoundMs: null, crcErrors: 0, timeouts: 0,
+  roundTimes: [], readTimes: [], loopDone: null,
+};
+const tags = new Map();         // epc -> tag record
+let reads = [];                 // every accepted read, for the log and CSV
+const MAX_READS = 200000;
+let tagSeq = 0, selectedEpc = null, sortKey = 'first', sortDir = 1, lastBankLabel = 'TID';
+
+function invCmd() {
+  const bank = $('bankSel').value;
+  let c = inv.mode === 'multi' ? 'U' + $('slotSel').value : 'Q';
+  if (bank !== '') c += `,R${bank},${hex(Math.max(0, +$('bankAddr').value || 0))},${hex(Math.min(32, Math.max(1, +$('bankLen').value || 1)))}`;
+  return c;
+}
+function bankLabel() {
+  const b = $('bankSel').value;
+  return b === '' ? 'Data' : `${BANK_NAMES[b]} ${+$('bankAddr').value || 0}+${+$('bankLen').value || 1}`;
+}
+
+// "U3400…210A", "Q3400…210A", or with a bank read appended: ",RE280…" (data) or ",3" (tag error)
+function parseTagLine(s) {
+  const m = /^[QU]([0-9A-F]{8,})(?:,\s*(?:R([0-9A-F]*)|([0-9A-FZ]+)))?$/.exec(s);
+  if (!m) return null;
+  const full = m[1];
+  const pc = full.slice(0, 4), epc = full.slice(4, -4), crc = full.slice(-4);
+  return { pc, epc, crcOk: crc16(pc + epc) === parseInt(crc, 16), data: m[2] || null, err: m[3] || null };
+}
+
+function recordRead(r, t, roundMs, bank) {
+  if (!r.crcOk) { inv.crcErrors++; return; }
+  let tag = tags.get(r.epc);
+  const isNew = !tag;
+  if (isNew) {
+    tag = { epc: r.epc, pc: r.pc, seq: ++tagSeq, count: 0, first: t, last: t, recent: [], data: null, dataBank: null, err: null, chip: null };
+    tags.set(r.epc, tag);
+    if ($('beepChk').checked) beep();
+  }
+  tag.count++; tag.last = t; tag.pc = r.pc; tag.recent.push(t); if (isNew) tag.flash = true;
+  if (r.data) {
+    tag.data = r.data; tag.dataBank = bank; tag.err = null;
+    if (bank && bank.bank === '2' && bank.addr === 0) tag.chip = decodeTid(r.data) || tag.chip;
+  } else if (r.err) tag.err = r.err;
+  inv.readTimes.push(t);
+  if (reads.length >= MAX_READS) reads = reads.slice(-MAX_READS / 2);
+  reads.push({ t, epc: r.epc, data: r.data, err: r.err, ms: roundMs });
+  readsVersion++;
+}
+
+function handleRound(res, bank) {
+  inv.rounds++;
+  inv.lastRoundMs = res.ms; inv.roundMsSum += res.ms;
+  inv.roundTimes.push(Date.now());
+  if (res.timedOut) inv.timeouts++;
+  for (const l of res.lines) {
+    const r = parseTagLine(l.s);
+    if (r) recordRead(r, l.t, res.ms, bank);
+  }
+  scheduleRender();
+}
+
+async function roundOnce() {
+  const cmd = invCmd();
+  const b = $('bankSel').value;
+  const bank = b === '' ? null : { bank: b, addr: +$('bankAddr').value || 0 };
+  lastBankLabel = bankLabel();
+  const res = await xfer(cmd, { quiet: true });
+  handleRound(res, bank);
+  return res;
+}
+async function inventoryLoop() {
+  while (inv.running && port) {
+    try { await roundOnce(); }
+    catch (e) { if (!port) break; await sleep(200); }
+    const pause = Math.max(0, +$('intervalInp').value || 0);
+    if (pause) await sleep(pause);
+  }
+}
+function startInventory() {
+  if (inv.running || !port) return;
+  ensureAudio();
+  inv.running = true;
+  if (!inv.startedAt || inv.stoppedAt) inv.startedAt = Date.now() - (inv.stoppedAt ? inv.stoppedAt - inv.startedAt : 0);
+  inv.stoppedAt = 0;
+  inv.loopDone = inventoryLoop().finally(() => { inv.running = false; inv.stoppedAt = Date.now(); updateRunUi(); });
+  updateRunUi();
+}
+function stopInventory() { inv.running = false; updateRunUi(); }
+function updateRunUi() {
+  const b = $('runBtn');
+  b.textContent = inv.running ? 'Stop' : 'Start';
+  b.className = 'btn ' + (inv.running ? 'stop' : 'go');
+  b.disabled = !port;
+  $('onceBtn').disabled = !port || inv.running;
+}
+function clearTags() {
+  tags.clear(); reads = []; tagSeq = 0; selectedEpc = null; readsVersion++;
+  Object.assign(inv, { rounds: 0, roundMsSum: 0, lastRoundMs: null, crcErrors: 0, timeouts: 0, roundTimes: [], readTimes: [] });
+  inv.startedAt = inv.running ? Date.now() : 0; inv.stoppedAt = 0;
+  renderMemTarget();
+  scheduleRender();
+}
+
+// ---------- rendering ----------
+let renderQueued = false;
+function scheduleRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; renderAll(); });
+}
+const COLS = [
+  { key: null, label: '' },
+  { key: 'seq', label: '#', cls: 'r' },
+  { key: 'epc', label: 'EPC' },
+  { key: 'chip', label: 'Chip' },
+  { key: 'data', label: 'data' },
+  { key: 'count', label: 'Reads', cls: 'r' },
+  { key: 'rate', label: '/s', cls: 'r' },
+  { key: 'first', label: 'First seen' },
+  { key: 'last', label: 'Last seen' },
+  { key: 'ago', label: 'Ago', cls: 'r' },
+];
+let headKey = '';
+function renderHead() {
+  const key = lastBankLabel + sortKey + sortDir;
+  if (key === headKey) return;
+  headKey = key;
+  $('tagsHead').innerHTML = COLS.map(c => {
+    const label = c.key === 'data' ? esc(lastBankLabel) : c.label;
+    if (!c.key) return '<th style="width:20px"></th>';
+    const arrow = sortKey === c.key ? `<span class="arrow">${sortDir > 0 ? '▲' : '▼'}</span>` : '';
+    return `<th class="sortable ${c.cls || ''}" data-sort="${c.key}">${label}${arrow}</th>`;
+  }).join('');
+}
+function tagRate(tag, now) {
+  while (tag.recent.length && now - tag.recent[0] > 5000) tag.recent.shift();
+  return tag.recent.length / Math.min(5, Math.max(1, (now - tag.first) / 1000));
+}
+function sortValue(tag, key, now) {
+  switch (key) {
+    case 'chip': return tag.chip ? tag.chip.maker + ' ' + tag.chip.model : '~';
+    case 'data': return tag.data || '~';
+    case 'rate': return tagRate(tag, now);
+    case 'ago': return now - tag.last;
+    default: return tag[key];
+  }
+}
+// rows are kept and patched cell by cell (not rebuilt), so text stays selectable and clicks land
+const rowEls = new Map();
+const CELL_CLS = ['', 'r num muted', '', '', '', 'r num', 'r num', 'num mono tm', 'num mono tm', 'r num'];
+function setCell(td, html) { if (td._h !== html) { td.innerHTML = html; td._h = html; } }
+function renderTags(now) {
+  const body = $('tagsBody');
+  if (!tags.size) {
+    rowEls.clear();
+    const msg = !serial ? 'This browser has no Web Serial. Open the page in desktop Chrome or Edge.'
+      : !port ? 'Connect the reader, then press Start.'
+      : inv.running ? 'Listening… hold a tag near the antenna.' : 'No tags yet. Press Start or Read once.';
+    const html = `<tr><td colspan="${COLS.length}" class="empty">${msg}</td></tr>`;
+    if (body._h !== html) { body.innerHTML = html; body._h = html; }
+    return;
+  }
+  if (body._h) { body.innerHTML = ''; body._h = null; }
+  const list = [...tags.values()];
+  list.forEach(t => t._rate = tagRate(t, now));
+  list.sort((a, b) => {
+    const va = sortValue(a, sortKey, now), vb = sortValue(b, sortKey, now);
+    return (va < vb ? -1 : va > vb ? 1 : 0) * sortDir || a.seq - b.seq;
+  });
+  let prev = null;
+  for (const t of list) {
+    let tr = rowEls.get(t.epc);
+    if (!tr) {
+      tr = document.createElement('tr');
+      tr.dataset.epc = t.epc;
+      CELL_CLS.forEach(c => { const td = tr.insertCell(); td.className = c; });
+      rowEls.set(t.epc, tr);
+    }
+    const ago = now - t.last, c = tr.cells;
+    const words = parseInt(t.pc, 16) >> 11;
+    setCell(c[0], `<span class="fresh ${ago < 1000 ? 'live' : ago < 5000 ? 'recent' : ''}"></span>`);
+    setCell(c[1], String(t.seq));
+    setCell(c[2], `<div class="epc">${groupWords(t.epc) || '<span class="muted">(empty EPC)</span>'}</div><div class="epc-sub">PC ${t.pc} · ${words * 16}-bit</div>`);
+    setCell(c[3], t.chip ? `${esc(t.chip.maker)} <span class="muted">${esc(t.chip.model)}</span>` : '<span class="muted">–</span>');
+    setCell(c[4], t.data ? `<span class="epc">${groupWords(t.data)}</span>` : t.err ? `<span class="muted" title="${esc(errText(t.err))}">error ${esc(t.err)}</span>` : '<span class="muted">–</span>');
+    setCell(c[5], String(t.count));
+    setCell(c[6], t._rate.toFixed(1));
+    setCell(c[7], fmtTime(t.first));
+    setCell(c[8], fmtTime(t.last));
+    setCell(c[9], fmtAgo(ago));
+    tr.classList.toggle('sel', t.epc === selectedEpc);
+    if (t.flash) { t.flash = false; tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash'); }
+    const want = prev ? prev.nextSibling : body.firstChild;
+    if (tr !== want) body.insertBefore(tr, want);
+    prev = tr;
+  }
+  while (prev && prev.nextSibling) prev.nextSibling.remove();
+  for (const [epc, tr] of rowEls) if (!tags.has(epc)) { tr.remove(); rowEls.delete(epc); }
+}
+let readsVersion = 0, logVersion = -1;
+function renderLog() {
+  if ($('logDataHead').textContent !== lastBankLabel) $('logDataHead').textContent = lastBankLabel;
+  if (logVersion === readsVersion) return;
+  logVersion = readsVersion;
+  const n = reads.length, show = reads.slice(-200).reverse();
+  $('logCount').textContent = n > 200 ? `latest 200 of ${n}` : '';
+  $('logBody').innerHTML = show.length ? show.map(r => `<tr>
+    <td class="mono num tm">${fmtTime(r.t)}</td>
+    <td class="epc">${r.epc.length > 24 ? r.epc.slice(0, 20) + '…' : r.epc}</td>
+    <td class="epc">${r.data ? (r.data.length > 24 ? r.data.slice(0, 20) + '…' : r.data) : r.err ? '<span class="muted">error ' + esc(r.err) + '</span>' : '<span class="muted">–</span>'}</td>
+    <td class="r num muted">${r.ms == null ? 'button' : Math.round(r.ms) + ' ms'}</td>
+  </tr>`).join('') : `<tr><td colspan="4" class="empty">Every read lands here with its time.</td></tr>`;
+}
+function renderStats(now) {
+  while (inv.readTimes.length && now - inv.readTimes[0] > 5000) inv.readTimes.shift();
+  while (inv.roundTimes.length && now - inv.roundTimes[0] > 5000) inv.roundTimes.shift();
+  const span = inv.startedAt ? Math.min(5, Math.max(1, ((inv.stoppedAt || now) - inv.startedAt) / 1000)) : 5;
+  $('stTags').textContent = tags.size;
+  const live = [...tags.values()].filter(t => now - t.last < 1000).length;
+  $('stTagsSub').textContent = tags.size ? `${live} in field now` : 'unique EPCs';
+  $('stReads').textContent = reads.length;
+  $('stRate').textContent = inv.running ? (inv.readTimes.length / span).toFixed(1) : '–';
+  $('stRounds').textContent = inv.rounds;
+  $('stRoundsSub').textContent = inv.running ? `${(inv.roundTimes.length / span).toFixed(1)} rounds/s` : (inv.timeouts ? inv.timeouts + ' timeouts' : 'inventory commands');
+  $('stRound').textContent = inv.lastRoundMs == null ? '–' : Math.round(inv.lastRoundMs) + ' ms';
+  $('stRoundSub').textContent = inv.rounds ? `avg ${Math.round(inv.roundMsSum / inv.rounds)} ms · ${invCmd()}` : 'last · avg';
+  $('stElapsed').textContent = inv.startedAt ? fmtDuration((inv.stoppedAt || now) - inv.startedAt) : '–';
+  $('stErrors').textContent = `${inv.crcErrors} CRC error${inv.crcErrors === 1 ? '' : 's'}`;
+}
+function renderAll() {
+  const now = Date.now();
+  renderHead(); renderTags(now); renderLog(); renderStats(now);
+}
+setInterval(() => { if (tags.size || inv.running) scheduleRender(); }, 250);
+
+// ---------- tag memory ----------
+function renderMemTarget() {
+  const t = selectedEpc && tags.get(selectedEpc);
+  $('memTarget').innerHTML = t
+    ? `Target <span class="epc">${groupWords(t.epc)}</span>${t.chip ? ' · ' + esc(t.chip.maker + ' ' + t.chip.model) : ''}`
+    : '<span class="muted">No tag selected: commands act on whichever single tag answers. Click a row in Tags to target one.</span>';
+  $('memSelect').disabled = !t || !port;
+  const cur = t ? t.epc : '';
+  if (t && !$('newEpc').value) $('newEpc').placeholder = cur;
+}
+function selectCmd(epc) {
+  // select on EPC bits starting at bit 20h (after CRC and PC); the reader takes up to 60h = 96 bits
+  const bits = Math.min(epc.length * 4, 0x60);
+  return `T1,20,${hex(bits)},${epc.slice(0, bits / 4)}`;
+}
+function interpret(kind, r) {
+  if (r.timedOut) return { ok: false, retry: true, msg: 'no reply (timeout)' };
+  let s = r.line;
+  if (s === 'X') return { ok: false, msg: 'reader rejected the command (X)' };
+  if (kind === 'R') {
+    if (s === 'R') return { ok: false, retry: true, msg: 'no tag answered' };
+    if (/^R[0-9A-F]+$/.test(s)) return { ok: true, data: s.slice(1) };
+  }
+  if (kind === 'W') {
+    if (s === 'W<OK>') return { ok: true, msg: 'written' };
+    if (s === 'W') return { ok: false, retry: true, msg: 'no tag answered' };
+  }
+  s = s.replace(/^[RW]/, '');
+  const z = /^([0-9A-F])?Z([0-9A-F]{2})$/.exec(s);
+  if (z) return { ok: false, msg: `partial write: ${parseInt(z[2], 16)} word(s) written${z[1] ? ', then ' + errText(z[1]) : ''}. Move the tag closer and write again.` };
+  if (/^[0-9A-F]$/.test(s)) return { ok: false, retry: s === 'E', msg: `tag error ${s}: ${errText(s)}` };
+  return { ok: false, msg: 'unexpected reply: ' + r.line };
+}
+async function memOp(kind, cmd) {
+  const target = selectedEpc && $('memSelect').checked ? selectedEpc : null;
+  const pwd = $('memPwd').value.trim().toUpperCase();
+  if (pwd && !/^[0-9A-F]{8}$/.test(pwd)) { memOut('err', 'Access password must be 8 hex digits.'); return null; }
+  const tries = Math.min(20, Math.max(1, +$('memTries').value || 1));
+  memOut('muted', `${cmd} …`);
+  const res = await exclusive(async t => {
+    let out;
+    for (let i = 1; i <= tries; i++) {
+      // T and P are one-shot: the reader forgets them after each R/W/K/L/Q/U, so resend every attempt
+      if (target) {
+        const r = await t(selectCmd(target));
+        if (r.line !== 'T') { out = { ok: false, retry: true, msg: 'select (T) failed: ' + (r.line ?? 'timeout') }; continue; }
+      }
+      if (pwd) {
+        const r = await t('P' + pwd);
+        if (r.line !== 'P') { out = { ok: false, retry: true, msg: 'password (P) failed: ' + (r.line ?? 'timeout') }; continue; }
+      }
+      const r = await t(cmd);
+      out = interpret(kind, r);
+      out.ms = r.ms; out.tries = i;
+      if (out.ok || !out.retry) break;
+    }
+    return out;
+  }).catch(e => ({ ok: false, msg: e.message }));
+  return res;
+}
+function memOut(cls, html) { $('memOut').innerHTML = `<span class="${cls}">${html}</span>`; }
+function memResult(cmd, res, extra = '') {
+  const meta = res.ms != null ? `<span class="muted">${esc(cmd)} · ${Math.round(res.ms)} ms${res.tries > 1 ? ` · attempt ${res.tries}` : ''}</span>\n` : '';
+  if (!res.ok) return memOut('err', meta + esc(res.msg[0].toUpperCase() + res.msg.slice(1)));
+  $('memOut').innerHTML = meta + `<span class="ok">${res.data ? groupWords(res.data) : 'OK: ' + esc(res.msg)}</span>${extra}`;
+}
+function bankAddrLen(bank, addr, len) {
+  addr = Math.max(0, Math.min(0x3FFF, addr | 0)); len = Math.max(1, Math.min(32, len | 0));
+  return `${bank},${hex(addr)},${hex(len)}`;
+}
+async function memRead(bank, addr, len) {
+  const cmd = 'R' + bankAddrLen(bank, addr, len);
+  const res = await memOp('R', cmd);
+  if (!res) return;
+  let extra = '';
+  if (res.ok && bank === 2 && addr === 0) {
+    const c = decodeTid(res.data);
+    if (c) extra = `\n<span class="muted">Chip: ${esc(c.maker)} ${esc(c.model)}</span>`;
+    const t = selectedEpc && tags.get(selectedEpc);
+    if (c && t && $('memSelect').checked) { t.chip = c; scheduleRender(); }
+  }
+  if (res.ok && bank === 0 && addr === 0 && res.data.length >= 16)
+    extra = `\n<span class="muted">Kill password ${res.data.slice(0, 8)} · access password ${res.data.slice(8, 16)}</span>`;
+  memResult(cmd, res, extra);
+}
+async function memWrite() {
+  const bank = +$('memBank').value, addr = +$('memAddr').value || 0;
+  const data = $('memData').value.replace(/\s+/g, '').toUpperCase();
+  if (!/^([0-9A-F]{4})+$/.test(data)) return memOut('err', 'Write data must be hex, 4 digits per word (e.g. 1234ABCD).');
+  const words = data.length / 4;
+  if (words > 32) return memOut('err', 'At most 32 words per write.');
+  if (bank === 2) return memOut('err', 'The TID bank is factory-locked on almost every chip.');
+  const what = `${BANK_NAMES[bank]} bank, word ${addr}, ${words} word(s)`;
+  if (bank !== 3 && !confirm(`Write ${data} to the ${what}?\n\n${bank === 0 ? 'This changes the tag\'s kill/access passwords. Forgetting them can lock you out of the tag.' : 'This changes the tag\'s EPC area (CRC/PC/EPC).'}`)) return;
+  const cmd = `W${bank},${hex(addr)},${hex(words)},${data}`;
+  const res = await memOp('W', cmd);
+  if (res) memResult(cmd, res);
+}
+async function writeEpc() {
+  const epc = $('newEpc').value.replace(/\s+/g, '').toUpperCase();
+  if (!/^([0-9A-F]{4})+$/.test(epc)) return memOut('err', 'New EPC must be hex, a multiple of 4 digits (96-bit = 24 digits).');
+  const words = epc.length / 4;
+  if (words > 31) return memOut('err', 'An EPC is at most 31 words (496 bits).');
+  const t = selectedEpc && tags.get(selectedEpc);
+  let pc = t ? t.pc : null;
+  if (!pc) {
+    const r = await memOp('R', 'R1,1,1');
+    if (!r || !r.ok) return memOut('err', 'Could not read the current PC word: ' + esc(r ? r.msg : ''));
+    pc = r.data.slice(0, 4);
+  }
+  const oldWords = parseInt(pc, 16) >> 11;
+  let cmd;
+  if (words === oldWords) cmd = `W1,2,${hex(words)},${epc}`;
+  else {
+    // a different length needs the PC word's length field (bits 15-11) rewritten too
+    const newPc = hex((parseInt(pc, 16) & 0x07FF) | (words << 11), 4);
+    cmd = `W1,1,${hex(words + 1)},${newPc}${epc}`;
+  }
+  const who = t ? groupWords(t.epc) : 'the single tag in the field';
+  if (!confirm(`Write EPC ${groupWords(epc)} to ${who}?${words !== oldWords ? `\n\nThe EPC length changes from ${oldWords * 16} to ${words * 16} bits, so the PC word is rewritten too.` : ''}`)) return;
+  const res = await memOp('W', cmd);
+  if (!res) return;
+  memResult(cmd, res, res.ok ? '\n<span class="muted">The tag now answers with the new EPC; it shows up as a new row.</span>' : '');
+  if (res.ok) { selectedEpc = null; renderMemTarget(); scheduleRender(); }
+}
+
+// ---------- console ----------
+let lastLogLn = null;
+function logLine(kind, text, ms) {
+  const el = $('consoleLog');
+  const ln = document.createElement('div');
+  ln.className = 'ln ' + kind;
+  const dir = { tx: '→', rx: '←', err: '!', note: '·' }[kind];
+  ln.innerHTML = `<span class="t">${fmtTime(Date.now())}</span><span class="d">${dir}</span><span class="x"></span><span class="ms">${ms != null ? Math.round(ms) + ' ms' : ''}</span>`;
+  ln.querySelector('.x').textContent = text;
+  const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+  el.appendChild(ln);
+  while (el.childElementCount > 600) el.firstElementChild.remove();
+  if (stick) el.scrollTop = el.scrollHeight;
+  lastLogLn = ln;
+}
+function setLastMs(ms) { if (lastLogLn) lastLogLn.querySelector('.ms').textContent = Math.round(ms) + ' ms'; }
+const cmdHistory = store.get('cmdHistory', []);
+let histPos = -1;
+async function sendConsole(cmd) {
+  cmd = cmd.trim();
+  if (!cmd || !port) return;
+  if (cmdHistory[0] !== cmd) { cmdHistory.unshift(cmd); cmdHistory.length = Math.min(cmdHistory.length, 50); store.set('cmdHistory', cmdHistory); }
+  histPos = -1;
+  const res = await xfer(cmd).catch(e => { logLine('err', e.message); return null; });
+  if (!res) return;
+  if (res.timedOut && !res.lines.length) return;
+  if (/^N[15]/.test(cmd)) loadReaderInfo();              // keep the settings panel honest
+  for (const l of res.lines) { const r = parseTagLine(l.s); if (r) recordRead(r, l.t, res.ms, null); }
+  scheduleRender();
+}
+
+// ---------- csv ----------
+function download(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+  a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const iso = t => new Date(t).toISOString();
+const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+function exportTags() {
+  const rows = [['n', 'epc', 'pc', 'bits', 'chip_maker', 'chip_model', 'data_bank', 'data', 'reads', 'first_seen', 'last_seen']];
+  [...tags.values()].sort((a, b) => a.seq - b.seq).forEach(t => rows.push([t.seq, t.epc, t.pc, (parseInt(t.pc, 16) >> 11) * 16,
+    t.chip?.maker || '', t.chip?.model || '', t.dataBank ? BANK_NAMES[t.dataBank.bank] : '', t.data || (t.err ? 'error ' + t.err : ''), t.count, iso(t.first), iso(t.last)]));
+  download(`fm505-tags-${stamp()}.csv`, rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n'));
+}
+function exportReads() {
+  const rows = [['time', 'epc', 'data', 'round_ms']];
+  reads.forEach(r => rows.push([iso(r.t), r.epc, r.data || (r.err ? 'error ' + r.err : ''), r.ms == null ? '' : r.ms.toFixed(1)]));
+  download(`fm505-reads-${stamp()}.csv`, rows.map(r => r.join(',')).join('\r\n'));
+}
+
+// ---------- beep ----------
+let audio = null;
+function ensureAudio() { try { audio = audio || new AudioContext(); if (audio.state === 'suspended') audio.resume(); } catch {} }
+function beep() {
+  if (!audio) return;
+  const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+  o.frequency.value = 1760; o.type = 'sine';
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.1);
+}
+
+// ---------- wiring ----------
+function setMode(m) {
+  inv.mode = m; store.set('mode', m);
+  document.querySelectorAll('#modeSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+  $('slotField').style.opacity = m === 'multi' ? 1 : .45;
+  $('slotSel').disabled = m !== 'multi';
+}
+function syncBankFields() {
+  const off = $('bankSel').value === '';
+  $('bankAddrField').style.opacity = $('bankLenField').style.opacity = off ? .45 : 1;
+  $('bankAddr').disabled = $('bankLen').disabled = off;
+  store.set('inv', { bank: $('bankSel').value, addr: $('bankAddr').value, len: $('bankLen').value, slots: $('slotSel').value, pause: $('intervalInp').value });
+  lastBankLabel = bankLabel();
+  scheduleRender();
+}
+
+function init() {
+  for (const b of [4800, 9600, 19200, 38400, 57600, 115200, 230400]) $('baudSel').add(new Option(b + ' baud', b));
+  $('baudSel').value = String(store.get('baud', 38400));
+  BAUDS.forEach((b, i) => $('moduleBaudSel').add(new Option(b + ' baud', i)));
+  $('moduleBaudSel').value = String(BAUDS.indexOf(+$('baudSel').value));
+  for (let v = 0x1B; v >= 0; v--) $('powerSel').add(new Option(`${v - 2} dBm (${hex(v, 2)})`, hex(v, 2)));
+  for (const [k, v] of Object.entries(REGIONS)) $('regionSel').add(new Option(`${k} · ${v}`, k));
+  for (let q = 0; q <= 10; q++) $('slotSel').add(new Option(`${q} (${2 ** q} slot${q ? 's' : ''})`, q));
+  const s = store.get('inv', {});
+  $('slotSel').value = s.slots ?? '3';
+  $('bankSel').value = s.bank ?? '2';
+  $('bankAddr').value = s.addr ?? '0';
+  $('bankLen').value = s.len ?? '6';
+  $('intervalInp').value = s.pause ?? '0';
+  renderGpio();
+  setMode(inv.mode);
+  syncBankFields();
+
+  $('connectBtn').onclick = connectClick;
+  $('refreshBtn').onclick = async () => { (await loadReaderInfo()) ? toast('Reader info refreshed') : toast('No reply from the reader', true); };
+  $('powerApply').onclick = applyPower;
+  $('regionApply').onclick = applyRegion;
+  $('baudApply').onclick = applyBaud;
+  $('gpioRead').onclick = () => readGpio(false);
+  $('gpioApply').onclick = applyGpio;
+  $('modeSeg').onclick = e => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); };
+  for (const id of ['bankSel', 'bankAddr', 'bankLen', 'slotSel', 'intervalInp']) $(id).addEventListener('change', syncBankFields);
+  $('runBtn').onclick = () => inv.running ? stopInventory() : startInventory();
+  $('onceBtn').onclick = async () => { ensureAudio(); if (!inv.startedAt) { inv.startedAt = Date.now(); inv.stoppedAt = Date.now(); } await roundOnce().catch(() => {}); inv.stoppedAt = Date.now(); };
+  $('clearBtn').onclick = clearTags;
+  $('exportTagsBtn').onclick = exportTags;
+  $('exportReadsBtn').onclick = exportReads;
+  $('tagsHead').onclick = e => {
+    const th = e.target.closest('[data-sort]'); if (!th) return;
+    const k = th.dataset.sort;
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = ['count', 'rate', 'last'].includes(k) ? -1 : 1; }
+    scheduleRender();
+  };
+  $('tagsBody').onclick = e => {
+    const tr = e.target.closest('tr[data-epc]'); if (!tr) return;
+    selectedEpc = selectedEpc === tr.dataset.epc ? null : tr.dataset.epc;
+    renderMemTarget(); scheduleRender();
+  };
+  $('memRead').onclick = () => memRead(+$('memBank').value, +$('memAddr').value || 0, +$('memLen').value || 1);
+  $('memWrite').onclick = memWrite;
+  $('epcWrite').onclick = writeEpc;
+  document.querySelectorAll('[data-quick]').forEach(b => b.onclick = () => {
+    const [bank, addr, len] = b.dataset.quick.split(',').map(Number);
+    $('memBank').value = bank; $('memAddr').value = addr; $('memLen').value = len;
+    memRead(bank, addr, len);
+  });
+  $('consoleForm').onsubmit = e => { e.preventDefault(); const v = $('consoleInput').value; $('consoleInput').value = ''; sendConsole(v); };
+  $('consoleInput').onkeydown = e => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    histPos = Math.max(-1, Math.min(cmdHistory.length - 1, histPos + (e.key === 'ArrowUp' ? 1 : -1)));
+    $('consoleInput').value = histPos < 0 ? '' : cmdHistory[histPos];
+  };
+  document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => sendConsole(b.dataset.cmd));
+  $('consoleClear').onclick = () => { $('consoleLog').innerHTML = ''; lastLogLn = null; };
+  $('themeBtn').onclick = () => {
+    const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+    store.set('theme', document.documentElement.dataset.theme);
+  };
+  const th = store.get('theme', null);
+  if (th) document.documentElement.dataset.theme = th;
+
+  setConnected(false);
+  scheduleRender();
+  if (!serial) {
+    banner('This browser has no Web Serial API. Use desktop Chrome or Edge (Firefox and Safari do not support it).', 'error');
+    $('connectBtn').disabled = true;
+    return;
+  }
+  // reconnect to the port picked last time, now and whenever it is plugged back in
+  const isLast = p => { const i = p.getInfo ? p.getInfo() : {}, l = store.get('lastPort', null); return l && i.usbVendorId === l.v && i.usbProductId === l.p; };
+  serial.addEventListener('connect', e => { if (!port && isLast(e.target)) { banner(''); openPort(e.target); } });
+  serial.getPorts().then(ports => { const p = ports.find(isLast); if (p && !port) openPort(p); });
+}
+init();
+</script>
+</body>
+</html>
