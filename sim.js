@@ -81,6 +81,9 @@
     return bits.substr(s.addr / 4, s.len / 4) === s.data.slice(0, s.len / 4);
   }
   const responders = () => tags.filter(t => t.present() && matches(t) && rnd() < answerP(t));
+  // the real module leaves most inventory rounds empty (about 2 in 3, at full power with tags at the
+  // antenna) and the rest list several tags together, as if whole rounds land on dead channels
+  const inventoryResponders = () => (rnd() < .6 ? [] : responders());
   function single() {
     const r = responders().sort((a, b) => wakeLevel(a) - wakeLevel(b));
     if (r.length === 1) return r[0];
@@ -132,12 +135,12 @@
       };
       if (m[1] === 'Q') {
         await wait(18 + rnd() * 20 + (extra ? 10 : 0));
-        const tag = single();
+        const tag = rnd() < .6 ? null : single();
         oneShotDone();
         return reply(tag ? 'Q' + fmt(tag) : 'Q');
       }
       const slots = 2 ** Math.min(15, +(m[2] || 0));
-      const r = responders(), bySlot = new Map();
+      const r = inventoryResponders(), bySlot = new Map();
       for (const t of r) { const k = Math.floor(rnd() * slots); bySlot.set(k, [...(bySlot.get(k) || []), t]); }
       const found = [...bySlot.values()].filter(v => v.length === 1).map(v => v[0]);
       await wait(12 + slots * 9 + found.length * (extra ? 14 : 5) + rnd() * 10);

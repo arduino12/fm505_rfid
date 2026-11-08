@@ -388,8 +388,8 @@ table.data td.r, table.data th.r { text-align: right; }
           <label class="check" for="hitWin">Window</label>
           <select id="hitWin" title="How far back Hit % looks">
             <option value="500">0.5 s</option>
-            <option value="1000" selected>1 s</option>
-            <option value="2000">2 s</option>
+            <option value="1000">1 s</option>
+            <option value="2000" selected>2 s</option>
             <option value="5000">5 s</option>
           </select>
           <button class="btn sm" id="sweepBtn" data-conn title="Step TX power up from −2 dBm and note the power at which each tag first answers">Power sweep</button>
@@ -404,9 +404,11 @@ table.data td.r, table.data th.r { text-align: right; }
         <div class="cl-bars" id="clBars"></div>
       </div>
       <div class="sweep-out" id="sweepOut" hidden></div>
-      <p class="hint">The reader reports no signal strength, so tags are ranked by <b>Hit %</b>: the share of inventory rounds in the window that each tag answered.
-        At full power every tag within reach answers almost every round. Lower the TX power until only the tag under the antenna stays near 100%;
-        <b>Power sweep</b> finds that level by raising the power 1 dB at a time and noting where each tag first answers (closest first).</p>
+      <p class="hint">The reader reports no signal strength, so tags are ranked by <b>Hit %</b>: of the inventory rounds in the window that got any answer, the share each tag answered in.
+        (This module leaves most rounds empty even with tags at the antenna, so empty rounds are not counted.)
+        At full power every tag within reach answers about as often. Lower the TX power until only the tag under the antenna keeps answering;
+        <b>Power sweep</b> finds that level by raising the power 1 dB at a time and noting where each tag first answers (closest first).
+        Each power change is saved in the module, so the sweep runs only when you press it.</p>
     </section>
 
     <section class="card">
@@ -985,29 +987,36 @@ function clearTags() {
 }
 
 // ---------- closest tag ----------
-// No RSSI in this protocol. Two stand-ins: Hit % (share of recent rounds a tag answered; near tags
-// keep answering when far ones start missing) and the lowest TX power at which a tag answers.
+// No RSSI in this protocol. Two stand-ins: Hit % (near tags keep answering when far ones start
+// missing) and the lowest TX power at which a tag answers.
+// On the real module most inventory rounds come back empty, even at full power with tags at the
+// antenna, and a round that does get answers usually lists several tags at once. So Hit % counts only
+// rounds that got some answer: empty rounds would drag every tag down alike and hide the gap.
 const LEAD = 0.3;               // Hit % lead over the runner-up that counts as a clear winner
+const MIN_ANSWERED = 3;         // answered rounds needed before ranking
 function hitStats(now) {
   const win = +$('hitWin').value, rs = inv.hitRounds;
   while (rs.length && now - rs[0].t > 5000) rs.shift();
-  let n = 0;
+  let n = 0, m = 0;
   const counts = new Map();
   for (const r of rs) {
     if (now - r.t > win) continue;
     n++;
+    if (r.epcs.size) m++;
     for (const e of r.epcs) counts.set(e, (counts.get(e) || 0) + 1);
   }
-  for (const t of tags.values()) t._hit = n ? (counts.get(t.epc) || 0) / n : null;
-  return n;
+  for (const t of tags.values()) t._hit = m ? (counts.get(t.epc) || 0) / m : n ? 0 : null;
+  return { n, m };
 }
 function closestState(now) {
-  const n = hitStats(now);
+  const { n, m } = hitStats(now);
   const ranked = [...tags.values()].filter(t => t._hit > 0).sort((a, b) => b._hit - a._hit || b.last - a.last);
-  const st = { n, ranked, top: ranked[0] || null, second: ranked[1] || null };
+  const st = { n, m, ranked, top: ranked[0] || null, second: ranked[1] || null };
   st.lead = st.top ? st.top._hit - (st.second ? st.second._hit : 0) : 0;
-  st.kind = sweep.running ? 'sweep' : !n ? 'idle' : n < 3 ? 'warming' : !st.top ? 'none'
-    : st.second && st.lead < LEAD ? 'close' : st.top._hit < 0.5 ? 'weak' : 'clear';
+  st.kind = sweep.running ? 'sweep' : !n ? 'idle'
+    : !m ? (n < 3 ? 'warming' : 'none')
+    : m < MIN_ANSWERED ? (n < 10 ? 'warming' : 'weak')
+    : st.second && st.lead < LEAD ? 'close' : 'clear';
   return st;
 }
 const pct = x => Math.round(x * 100) + '%';
@@ -1025,10 +1034,11 @@ function renderClosest(st) {
   else if (st.kind === 'none') sub = `No tag answered in the last ${win}.`;
   else {
     epc = groupWords(st.top.epc);
-    const line = `${esc(chipName(st.top))} · answered ${pct(st.top._hit)} of ${st.n} rounds` + (st.second ? ` · next best ${pct(st.second._hit)}` : ' · no other tag answering');
-    sub = st.kind === 'clear' ? line
-      : st.kind === 'weak' ? line + '. At the edge of range: the antenna may be between tags, or this chip needs a step more power.'
-      : `${st.ranked.filter(t => st.top._hit - t._hit < LEAD).length} tags answer about as often (${pct(st.top._hit)} vs ${pct(st.second._hit)}). Lower the TX power or hold the antenna closer to one tag.`;
+    const rounds = `${st.m} of ${st.n} rounds got answers`;
+    sub = st.kind === 'clear'
+      ? `${esc(chipName(st.top))} · in ${pct(st.top._hit)} of answered rounds` + (st.second ? ` · next best ${pct(st.second._hit)}` : ' · no other tag answering') + ` · ${rounds}`
+      : st.kind === 'weak' ? `${esc(chipName(st.top))} · only ${rounds}: at the edge of range. Move closer or raise the power a step.`
+      : `${st.ranked.filter(t => st.top._hit - t._hit < LEAD).length} tags answer about as often (${pct(st.top._hit)} vs ${pct(st.second._hit)} of answered rounds). Lower the TX power or hold the antenna closer to one tag.`;
   }
   $('clEpc').textContent = epc;
   $('clSub').innerHTML = sub;
@@ -1046,7 +1056,7 @@ function renderClosest(st) {
 // note the step at which each tag first answers. The closest tag wakes first. Stops once a second tag
 // answers (that gives the margin) and puts the original power back. Every step is an N1 write, which
 // the manual implies is stored in the module, so this runs only on demand.
-const SWEEP_ROUNDS = 4;
+const SWEEP_ROUNDS = 8;         // the module leaves most rounds empty; fewer rounds per step miss tags
 const sweep = { running: false, stopReq: false, level: null, result: null, writes: 0 };
 async function powerSweep() {
   if (sweep.running) { sweep.stopReq = true; updateRunUi(); return; }   // second click: stop after the current step
@@ -1153,7 +1163,7 @@ const COLS = [
   { key: 'data', label: 'data' },
   { key: 'count', label: 'Reads', cls: 'r' },
   { key: 'rate', label: '/s', cls: 'r' },
-  { key: 'hit', label: 'Hit %', cls: 'r', title: 'Share of inventory rounds in the Closest-tag window that this tag answered' },
+  { key: 'hit', label: 'Hit %', cls: 'r', title: 'Of the inventory rounds in the Closest-tag window that got any answer, the share this tag answered in' },
   { key: 'minpw', label: 'Min power', cls: 'r', title: 'Lowest TX power at which the tag answered in the last power sweep (lower = closer)' },
   { key: 'first', label: 'First seen' },
   { key: 'last', label: 'Last seen' },
@@ -1513,7 +1523,7 @@ function init() {
   $('refreshBtn').onclick = async () => { (await loadReaderInfo()) ? toast('Reader info refreshed') : toast('No reply from the reader', true); };
   $('powerApply').onclick = () => applyPower();
   $('sweepBtn').onclick = () => { ensureAudio(); powerSweep(); };
-  $('hitWin').value = String(store.get('hitWin', 1000));
+  $('hitWin').value = String(store.get('hitWin', 2000));
   $('hitWin').onchange = () => { store.set('hitWin', +$('hitWin').value); scheduleRender(); };
   $('regionApply').onclick = applyRegion;
   $('baudApply').onclick = applyBaud;
