@@ -187,6 +187,29 @@ table.data td.r, table.data th.r { text-align: right; }
 .empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: 13px; white-space: normal !important; }
 .scroll { max-height: 340px; overflow-y: auto; }
 .tags-scroll { max-height: 520px; overflow: auto; }
+#tagsTable tbody tr.near td:first-child { box-shadow: inset 3px 0 var(--good); }
+.hitcell { display: inline-flex; align-items: center; gap: 6px; }
+.hitcell .bar { width: 36px; height: 6px; }
+#tagsTable tr.near .hitcell .bar i { background: var(--good); }
+
+/* closest tag */
+.closest { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 12px 20px; align-items: start; }
+@media (max-width: 760px) { .closest { grid-template-columns: minmax(0, 1fr); } }
+.badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--surface-2); color: var(--muted); }
+.badge.good { background: var(--good-soft); color: var(--good-text); }
+.badge.warn { background: var(--warn-soft); color: var(--warn-text); }
+.badge.busy { background: var(--accent-soft); color: var(--accent-text); }
+.cl-epc { font-size: 17px; font-weight: 600; margin-top: 8px; overflow-wrap: anywhere; }
+.cl-sub { font-size: 12.5px; color: var(--ink-2); margin-top: 3px; }
+.cl-bars { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(60px, 140px) 40px; gap: 8px; align-items: center; font-size: 12px; }
+.bar-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--muted); border-radius: 4px; }
+.bar-row.top.good .bar i { background: var(--good); }
+.bar-row.top.warn .bar i { background: var(--warn); }
+.sweep-out { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.sweep-out .btn { margin-top: 6px; }
 
 /* memory */
 .mem-target { padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; margin-bottom: 10px; overflow-wrap: anywhere; }
@@ -360,6 +383,34 @@ table.data td.r, table.data th.r { text-align: right; }
 
     <section class="card">
       <div class="card-head">
+        <h2>Closest tag</h2>
+        <div class="row" style="align-items:center">
+          <label class="check" for="hitWin">Window</label>
+          <select id="hitWin" title="How far back Hit % looks">
+            <option value="500">0.5 s</option>
+            <option value="1000" selected>1 s</option>
+            <option value="2000">2 s</option>
+            <option value="5000">5 s</option>
+          </select>
+          <button class="btn sm" id="sweepBtn" data-conn title="Step TX power up from −2 dBm and note the power at which each tag first answers">Power sweep</button>
+        </div>
+      </div>
+      <div class="closest">
+        <div>
+          <span class="badge" id="clBadge">Idle</span>
+          <div class="cl-epc epc" id="clEpc">–</div>
+          <div class="cl-sub" id="clSub"></div>
+        </div>
+        <div class="cl-bars" id="clBars"></div>
+      </div>
+      <div class="sweep-out" id="sweepOut" hidden></div>
+      <p class="hint">The reader reports no signal strength, so tags are ranked by <b>Hit %</b>: the share of inventory rounds in the window that each tag answered.
+        At full power every tag within reach answers almost every round. Lower the TX power until only the tag under the antenna stays near 100%;
+        <b>Power sweep</b> finds that level by raising the power 1 dB at a time and noting where each tag first answers (closest first).</p>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
         <h2>Tags</h2>
         <div class="row">
           <button class="btn sm" id="exportTagsBtn">Export CSV</button>
@@ -372,7 +423,7 @@ table.data td.r, table.data th.r { text-align: right; }
           <tbody id="tagsBody"></tbody>
         </table>
       </div>
-      <p class="hint">Click a tag to target it in Tag memory. Times are this computer's clock. The reader gives no RSSI.</p>
+      <p class="hint">Click a tag to target it in Tag memory. Times are this computer's clock. The reader gives no RSSI; Hit % and Min power (from the last power sweep) stand in for it.</p>
     </section>
 
     <div class="grid2">
@@ -663,7 +714,7 @@ async function openPort(p, baud) {
   $('baudSel').value = String(baud);
   $('infoPort').textContent = `${portLabel(p)} @ ${baud}`;
   setConnected(true);
-  banner(window.fm505Sim ? 'Simulation mode: a fake FM-505 with a few tags that come and go. Remove ?sim from the URL for real hardware.' : '');
+  banner(window.fm505Sim ? 'Simulation mode: a fake FM-505 over four tags in a row 0.5 m apart, with the antenna moving from tag to tag every 7 s. Remove ?sim from the URL for real hardware.' : '');
   logLine('note', `opened ${portLabel(p)} at ${baud} baud`);
   const ok = await loadReaderInfo();
   if (!ok) banner(`The port is open but the reader does not answer at ${baud} baud. Check TX/RX wiring and power, or try another baud rate in the top bar.`, 'error');
@@ -758,13 +809,16 @@ async function loadReaderInfo() {
   return true;
 }
 
-async function applyPower() {
-  const v = $('powerSel').value;
+async function setPower(v) {
   const r = await xfer('N1,' + v).catch(e => null);
   // the manual says the module restarts without replying; firmware D29B echoes N<value> instead
   if (r && r.timedOut) await sleep(800);
   const now = nValue(await xfer('N0,00').catch(() => null));
   if (now) setPowerUi(now);
+  return now;
+}
+async function applyPower(v = $('powerSel').value) {
+  const now = await setPower(v);
   now === v ? toast('TX power set to ' + powerLabel(v)) : toast('Power not confirmed (reader reports ' + (now || 'nothing') + ')', true);
 }
 async function applyRegion() {
@@ -820,15 +874,16 @@ const inv = {
   mode: store.get('mode', 'multi'), running: false, startedAt: 0, stoppedAt: 0,
   rounds: 0, roundMsSum: 0, lastRoundMs: null, crcErrors: 0, timeouts: 0,
   roundTimes: [], readTimes: [], loopDone: null,
+  hitRounds: [],                // {t, epcs:Set} per answered inventory round, last 5 s, for Hit %
 };
 const tags = new Map();         // epc -> tag record
 let reads = [];                 // every accepted read, for the log and CSV
 const MAX_READS = 200000;
 let tagSeq = 0, selectedEpc = null, sortKey = 'first', sortDir = 1, lastBankLabel = 'TID';
 
-function invCmd() {
+function invCmd(mode = inv.mode) {
   const bank = $('bankSel').value;
-  let c = inv.mode === 'multi' ? 'U' + $('slotSel').value : 'Q';
+  let c = mode === 'multi' ? 'U' + $('slotSel').value : 'Q';
   if (bank !== '') c += `,R${bank},${hex(Math.max(0, +$('bankAddr').value || 0))},${hex(Math.min(32, Math.max(1, +$('bankLen').value || 1)))}`;
   return c;
 }
@@ -871,24 +926,27 @@ function handleRound(res, bank) {
   inv.lastRoundMs = res.ms; inv.roundMsSum += res.ms;
   inv.roundTimes.push(Date.now());
   if (res.timedOut) inv.timeouts++;
+  const epcs = new Set();
   for (const l of res.lines) {
     const r = parseTagLine(l.s);
-    if (r) recordRead(r, l.t, res.ms, bank);
+    if (r) { recordRead(r, l.t, res.ms, bank); if (r.crcOk) epcs.add(r.epc); }
   }
+  // a round that timed out or was rejected says nothing about which tags are in range
+  if (!res.timedOut && !res.rejected) inv.hitRounds.push({ t: Date.now(), epcs });
   scheduleRender();
 }
 
+const roundBank = () => { const b = $('bankSel').value; return b === '' ? null : { bank: b, addr: +$('bankAddr').value || 0 }; };
 async function roundOnce() {
   const cmd = invCmd();
-  const b = $('bankSel').value;
-  const bank = b === '' ? null : { bank: b, addr: +$('bankAddr').value || 0 };
+  const bank = roundBank();
   lastBankLabel = bankLabel();
   const res = await xfer(cmd, { quiet: true });
   handleRound(res, bank);
   return res;
 }
 async function inventoryLoop() {
-  while (inv.running && port) {
+  while (inv.running && port && !sweep.running) {
     try { await roundOnce(); }
     catch (e) { if (!port) break; await sleep(200); }
     const pause = Math.max(0, +$('intervalInp').value || 0);
@@ -909,15 +967,175 @@ function updateRunUi() {
   const b = $('runBtn');
   b.textContent = inv.running ? 'Stop' : 'Start';
   b.className = 'btn ' + (inv.running ? 'stop' : 'go');
-  b.disabled = !port;
-  $('onceBtn').disabled = !port || inv.running;
+  b.disabled = !port || sweep.running;
+  $('onceBtn').disabled = !port || inv.running || sweep.running;
+  for (const id of ['powerApply', 'regionApply', 'baudApply']) $(id).disabled = !port || sweep.running;
+  const s = $('sweepBtn');
+  s.textContent = !sweep.running ? 'Power sweep' : sweep.stopReq ? 'Stopping…' : 'Stop sweep';
+  s.classList.toggle('stop', sweep.running);
+  s.disabled = !port;
 }
 function clearTags() {
-  tags.clear(); reads = []; tagSeq = 0; selectedEpc = null; readsVersion++;
-  Object.assign(inv, { rounds: 0, roundMsSum: 0, lastRoundMs: null, crcErrors: 0, timeouts: 0, roundTimes: [], readTimes: [] });
+  tags.clear(); reads = []; tagSeq = 0; selectedEpc = null; readsVersion++; sweep.result = null;
+  Object.assign(inv, { rounds: 0, roundMsSum: 0, lastRoundMs: null, crcErrors: 0, timeouts: 0, roundTimes: [], readTimes: [], hitRounds: [] });
   inv.startedAt = inv.running ? Date.now() : 0; inv.stoppedAt = 0;
   renderMemTarget();
+  renderSweep();
   scheduleRender();
+}
+
+// ---------- closest tag ----------
+// No RSSI in this protocol. Two stand-ins: Hit % (share of recent rounds a tag answered; near tags
+// keep answering when far ones start missing) and the lowest TX power at which a tag answers.
+const LEAD = 0.3;               // Hit % lead over the runner-up that counts as a clear winner
+function hitStats(now) {
+  const win = +$('hitWin').value, rs = inv.hitRounds;
+  while (rs.length && now - rs[0].t > 5000) rs.shift();
+  let n = 0;
+  const counts = new Map();
+  for (const r of rs) {
+    if (now - r.t > win) continue;
+    n++;
+    for (const e of r.epcs) counts.set(e, (counts.get(e) || 0) + 1);
+  }
+  for (const t of tags.values()) t._hit = n ? (counts.get(t.epc) || 0) / n : null;
+  return n;
+}
+function closestState(now) {
+  const n = hitStats(now);
+  const ranked = [...tags.values()].filter(t => t._hit > 0).sort((a, b) => b._hit - a._hit || b.last - a.last);
+  const st = { n, ranked, top: ranked[0] || null, second: ranked[1] || null };
+  st.lead = st.top ? st.top._hit - (st.second ? st.second._hit : 0) : 0;
+  st.kind = sweep.running ? 'sweep' : !n ? 'idle' : n < 3 ? 'warming' : !st.top ? 'none'
+    : st.second && st.lead < LEAD ? 'close' : st.top._hit < 0.5 ? 'weak' : 'clear';
+  return st;
+}
+const pct = x => Math.round(x * 100) + '%';
+const chipName = t => t.chip ? t.chip.maker.split(' ')[0] + ' ' + t.chip.model : 'unknown chip';
+const epcTail = t => '…' + groupWords(t.epc.slice(-8));
+const levelDbm = lv => (lv > 0x1B ? 'FF' : (lv - 2) + ' dBm');
+function renderClosest(st) {
+  const win = $('hitWin').selectedOptions[0].text;
+  const badge = { idle: ['Idle', ''], warming: ['Measuring…', 'busy'], none: ['No tag', ''], clear: ['Clear lead', 'good'], weak: ['Weak', 'warn'], close: ['Too close to call', 'warn'], sweep: ['Sweeping power…', 'busy'] }[st.kind];
+  $('clBadge').textContent = badge[0]; $('clBadge').className = 'badge ' + badge[1];
+  let epc = '–', sub;
+  if (st.kind === 'idle') sub = port ? 'Start the inventory to rank tags by how often they answer.' : 'Connect the reader and start the inventory.';
+  else if (st.kind === 'sweep') sub = 'The inventory pauses while the power sweep runs.';
+  else if (st.kind === 'warming') sub = 'Collecting a few rounds…';
+  else if (st.kind === 'none') sub = `No tag answered in the last ${win}.`;
+  else {
+    epc = groupWords(st.top.epc);
+    const line = `${esc(chipName(st.top))} · answered ${pct(st.top._hit)} of ${st.n} rounds` + (st.second ? ` · next best ${pct(st.second._hit)}` : ' · no other tag answering');
+    sub = st.kind === 'clear' ? line
+      : st.kind === 'weak' ? line + '. At the edge of range: the antenna may be between tags, or this chip needs a step more power.'
+      : `${st.ranked.filter(t => st.top._hit - t._hit < LEAD).length} tags answer about as often (${pct(st.top._hit)} vs ${pct(st.second._hit)}). Lower the TX power or hold the antenna closer to one tag.`;
+  }
+  $('clEpc').textContent = epc;
+  $('clSub').innerHTML = sub;
+  const rows = st.kind === 'sweep' ? [] : st.ranked.slice(0, 5);
+  const html = rows.length ? rows.map((t, i) => `<div class="bar-row${i === 0 ? ' top ' + (st.kind === 'clear' ? 'good' : 'warn') : ''}">
+      <span class="nm"><span class="epc">${epcTail(t)}</span> · ${esc(chipName(t))}</span>
+      <span class="bar"><i style="width:${Math.round(t._hit * 100)}%"></i></span>
+      <span class="r num">${pct(t._hit)}</span></div>`).join('')
+    : `<div class="muted" style="font-size:12px">${st.kind === 'sweep' ? '' : 'Hit % per tag shows here while the inventory runs.'}</div>`;
+  const bars = $('clBars');
+  if (bars._h !== html) { bars.innerHTML = html; bars._h = html; }
+}
+
+// Power sweep: raise TX power one step at a time from the bottom, a few inventory rounds per step, and
+// note the step at which each tag first answers. The closest tag wakes first. Stops once a second tag
+// answers (that gives the margin) and puts the original power back. Every step is an N1 write, which
+// the manual implies is stored in the module, so this runs only on demand.
+const SWEEP_ROUNDS = 4;
+const sweep = { running: false, stopReq: false, level: null, result: null, writes: 0 };
+async function powerSweep() {
+  if (sweep.running) { sweep.stopReq = true; updateRunUi(); return; }   // second click: stop after the current step
+  if (!port) return;
+  const wasRunning = inv.running;
+  sweep.running = true; sweep.stopReq = false; sweep.level = null;   // set first: a quick second click means "stop"
+  stopInventory(); renderSweep(); scheduleRender();
+  await inv.loopDone?.catch(() => {});
+  const found = new Map();     // epc -> first level it answered at
+  const cmd = invCmd('multi'), bank = roundBank();
+  lastBankLabel = bankLabel();
+  let orig = null, tested = -1, err = null, writes = 0, touched = false, confirmed = null;
+  try {
+    orig = nValue(await xfer('N0,00'));
+    if (!orig) throw new Error('could not read the current TX power');
+    for (let lv = 0; lv <= 0x1B && !sweep.stopReq; lv++) {
+      const v = hex(lv, 2);
+      touched = true;
+      const r = await xfer('N1,' + v);
+      writes++; sweep.writes++;
+      if (nValue(r) !== v) throw new Error(`the reader did not confirm power ${v} (replied ${r.line ?? 'nothing'})`);
+      confirmed = v; sweep.level = lv; renderSweep(found);
+      for (let k = 0; k < SWEEP_ROUNDS && !sweep.stopReq; k++) {
+        const res = await xfer(cmd, { quiet: true });
+        for (const l of res.lines) {
+          const tr = parseTagLine(l.s);
+          if (!tr) continue;
+          recordRead(tr, l.t, res.ms, bank);
+          if (tr.crcOk && !found.has(tr.epc)) found.set(tr.epc, lv);
+        }
+      }
+      tested = lv;
+      scheduleRender(); renderSweep(found);
+      if (found.size >= 2) break;
+    }
+  } catch (e) { err = e.message; }
+  const stopped = sweep.stopReq && !err && found.size < 2 && tested < 0x1B;
+  if (orig && touched && confirmed !== orig) {
+    const now = await setPower(orig);
+    writes++; sweep.writes++;
+    if (now !== orig) err = (err ? err + '; ' : '') + `TX power was not restored to ${orig} (reader reports ${now || 'nothing'})`;
+  }
+  sweep.running = false;
+  sweep.result = { t: Date.now(), found, tested, err, orig, writes, stopped };
+  updateRunUi(); renderSweep(); scheduleRender();
+  if (wasRunning && port) startInventory();
+}
+// working power: a few dB above where the closest tag first answered (first answers are at the edge,
+// so it misses rounds there), and 2 dB under where the next tag first answered
+function sweepSuggestion(res) {
+  const lv = [...res.found.values()];
+  if (!lv.length) return null;
+  const c = lv[0], r = lv[1];
+  if (r === undefined) return Math.min(c + 3, res.tested);
+  return r - c >= 3 ? Math.min(c + 3, r - 2) : null;
+}
+function renderSweep(found) {
+  const el = $('sweepOut');
+  if (sweep.running) {
+    const lv = sweep.level;
+    el.hidden = false;
+    el.innerHTML = lv === null ? 'Starting the power sweep…'
+      : `Sweeping TX power: <b>${levelDbm(lv)}</b> (step ${lv + 1} of 28) · ${found && found.size ? found.size + ' tag' + (found.size > 1 ? 's' : '') + ' answered' : 'no tag yet'}`;
+    return;
+  }
+  const res = sweep.result;
+  if (!res) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  const name = epc => { const t = tags.get(epc); return `<span class="epc">${groupWords(epc)}</span>${t && t.chip ? ' (' + esc(chipName(t)) + ')' : ''}`; };
+  const e = [...res.found.entries()];
+  let html = `<span class="muted">Power sweep ${fmtTime(res.t).slice(0, 8)} · </span>`;
+  if (res.err) html += `<span style="color:var(--critical-text)">Stopped: ${esc(res.err)}.</span> `;
+  else if (res.stopped) html += 'Stopped by you. ';
+  if (!e.length) html += res.tested >= 0 ? `No tag answered up to ${levelDbm(res.tested)}.` : '';
+  else if (e.length >= 2 && e[0][1] === e[1][1])
+    html += `Two tags first answered at the same power (${levelDbm(e[0][1])}): ${name(e[0][0])} and ${name(e[1][0])}. Too close to call; hold the antenna closer to one of them.`;
+  else {
+    html += `<b>Closest:</b> ${name(e[0][0])} answers from <b>${levelDbm(e[0][1])}</b>.`;
+    html += e.length >= 2
+      ? ` Next: ${name(e[1][0])} from ${levelDbm(e[1][1])}, a <b>${e[1][1] - e[0][1]} dB</b> margin.`
+      : ` No other tag answered up to ${levelDbm(res.tested)}.`;
+  }
+  const s = res.err ? null : sweepSuggestion(res);
+  if (s === null && !res.err && e.length >= 2 && e[0][1] !== e[1][1]) html += ' That margin is too small to pick a power that leaves only the closest tag; hold the antenna lower.';
+  html += `<br><span class="muted">${res.writes ? `${res.writes} power change${res.writes === 1 ? '' : 's'}${res.orig ? `, TX power back at ${powerLabel(res.orig)}` : ''}` : 'TX power unchanged'}.</span>`;
+  if (s !== null) html += `<br><button class="btn sm" id="useSweepPower" data-conn>Use ${levelDbm(s)}</button> <span class="muted" style="font-size:12px">only the closest tag answered at this power during the sweep</span>`;
+  el.innerHTML = html;
+  const b = $('useSweepPower');
+  if (b) b.onclick = async () => { await applyPower(hex(s, 2)); };
 }
 
 // ---------- rendering ----------
@@ -935,6 +1153,8 @@ const COLS = [
   { key: 'data', label: 'data' },
   { key: 'count', label: 'Reads', cls: 'r' },
   { key: 'rate', label: '/s', cls: 'r' },
+  { key: 'hit', label: 'Hit %', cls: 'r', title: 'Share of inventory rounds in the Closest-tag window that this tag answered' },
+  { key: 'minpw', label: 'Min power', cls: 'r', title: 'Lowest TX power at which the tag answered in the last power sweep (lower = closer)' },
   { key: 'first', label: 'First seen' },
   { key: 'last', label: 'Last seen' },
   { key: 'ago', label: 'Ago', cls: 'r' },
@@ -948,7 +1168,7 @@ function renderHead() {
     const label = c.key === 'data' ? esc(lastBankLabel) : c.label;
     if (!c.key) return '<th style="width:20px"></th>';
     const arrow = sortKey === c.key ? `<span class="arrow">${sortDir > 0 ? '▲' : '▼'}</span>` : '';
-    return `<th class="sortable ${c.cls || ''}" data-sort="${c.key}">${label}${arrow}</th>`;
+    return `<th class="sortable ${c.cls || ''}" data-sort="${c.key}"${c.title ? ` title="${esc(c.title)}"` : ''}>${label}${arrow}</th>`;
   }).join('');
 }
 function tagRate(tag, now) {
@@ -960,15 +1180,25 @@ function sortValue(tag, key, now) {
     case 'chip': return tag.chip ? tag.chip.maker + ' ' + tag.chip.model : '~';
     case 'data': return tag.data || '~';
     case 'rate': return tagRate(tag, now);
+    case 'hit': return tag._hit ?? -1;
+    case 'minpw': { const lv = sweepLevel(tag); return lv === null ? 999 : lv; }
     case 'ago': return now - tag.last;
     default: return tag[key];
   }
 }
 // rows are kept and patched cell by cell (not rebuilt), so text stays selectable and clicks land
 const rowEls = new Map();
-const CELL_CLS = ['', 'r num muted', '', '', '', 'r num', 'r num', 'num mono tm', 'num mono tm', 'r num'];
+const CELL_CLS = ['', 'r num muted', '', '', '', 'r num', 'r num', 'r num', 'r num', 'num mono tm', 'num mono tm', 'r num'];
 function setCell(td, html) { if (td._h !== html) { td.innerHTML = html; td._h = html; } }
-function renderTags(now) {
+const sweepLevel = t => sweep.result ? sweep.result.found.get(t.epc) ?? null : null;
+function minPowerCell(t) {
+  const res = sweep.result, lv = sweepLevel(t);
+  if (lv !== null) return levelDbm(lv);
+  // seen before the sweep but silent through it: farther than the highest power tried
+  if (res && res.tested >= 0 && t.first <= res.t) return `<span class="muted">&gt; ${levelDbm(res.tested)}</span>`;
+  return '<span class="muted">–</span>';
+}
+function renderTags(now, st) {
   const body = $('tagsBody');
   if (!tags.size) {
     rowEls.clear();
@@ -1004,10 +1234,13 @@ function renderTags(now) {
     setCell(c[4], t.data ? `<span class="epc">${groupWords(t.data)}</span>` : t.err ? `<span class="muted" title="${esc(errText(t.err))}">error ${esc(t.err)}</span>` : '<span class="muted">–</span>');
     setCell(c[5], String(t.count));
     setCell(c[6], t._rate.toFixed(1));
-    setCell(c[7], fmtTime(t.first));
-    setCell(c[8], fmtTime(t.last));
-    setCell(c[9], fmtAgo(ago));
+    setCell(c[7], t._hit == null ? '<span class="muted">–</span>' : `<span class="hitcell"><span class="bar"><i style="width:${Math.round(t._hit * 100)}%"></i></span>${pct(t._hit)}</span>`);
+    setCell(c[8], minPowerCell(t));
+    setCell(c[9], fmtTime(t.first));
+    setCell(c[10], fmtTime(t.last));
+    setCell(c[11], fmtAgo(ago));
     tr.classList.toggle('sel', t.epc === selectedEpc);
+    tr.classList.toggle('near', st.kind === 'clear' && st.top === t);
     if (t.flash) { t.flash = false; tr.classList.remove('flash'); void tr.offsetWidth; tr.classList.add('flash'); }
     const want = prev ? prev.nextSibling : body.firstChild;
     if (tr !== want) body.insertBefore(tr, want);
@@ -1048,9 +1281,10 @@ function renderStats(now) {
 }
 function renderAll() {
   const now = Date.now();
-  renderHead(); renderTags(now); renderLog(); renderStats(now);
+  const st = closestState(now);
+  renderHead(); renderTags(now, st); renderClosest(st); renderLog(); renderStats(now);
 }
-setInterval(() => { if (tags.size || inv.running) scheduleRender(); }, 250);
+setInterval(() => { if (tags.size || inv.running || inv.hitRounds.length) scheduleRender(); }, 250);
 
 // ---------- tag memory ----------
 function renderMemTarget() {
@@ -1219,9 +1453,9 @@ function download(name, text) {
 const iso = t => new Date(t).toISOString();
 const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
 function exportTags() {
-  const rows = [['n', 'epc', 'pc', 'bits', 'chip_maker', 'chip_model', 'data_bank', 'data', 'reads', 'first_seen', 'last_seen']];
-  [...tags.values()].sort((a, b) => a.seq - b.seq).forEach(t => rows.push([t.seq, t.epc, t.pc, (parseInt(t.pc, 16) >> 11) * 16,
-    t.chip?.maker || '', t.chip?.model || '', t.dataBank ? BANK_NAMES[t.dataBank.bank] : '', t.data || (t.err ? 'error ' + t.err : ''), t.count, iso(t.first), iso(t.last)]));
+  const rows = [['n', 'epc', 'pc', 'bits', 'chip_maker', 'chip_model', 'data_bank', 'data', 'reads', 'first_seen', 'last_seen', 'sweep_min_power_dbm']];
+  [...tags.values()].sort((a, b) => a.seq - b.seq).forEach(t => { const lv = sweepLevel(t); rows.push([t.seq, t.epc, t.pc, (parseInt(t.pc, 16) >> 11) * 16,
+    t.chip?.maker || '', t.chip?.model || '', t.dataBank ? BANK_NAMES[t.dataBank.bank] : '', t.data || (t.err ? 'error ' + t.err : ''), t.count, iso(t.first), iso(t.last), lv === null ? '' : lv - 2]); });
   download(`fm505-tags-${stamp()}.csv`, rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n'));
 }
 function exportReads() {
@@ -1277,7 +1511,10 @@ function init() {
 
   $('connectBtn').onclick = connectClick;
   $('refreshBtn').onclick = async () => { (await loadReaderInfo()) ? toast('Reader info refreshed') : toast('No reply from the reader', true); };
-  $('powerApply').onclick = applyPower;
+  $('powerApply').onclick = () => applyPower();
+  $('sweepBtn').onclick = () => { ensureAudio(); powerSweep(); };
+  $('hitWin').value = String(store.get('hitWin', 1000));
+  $('hitWin').onchange = () => { store.set('hitWin', +$('hitWin').value); scheduleRender(); };
   $('regionApply').onclick = applyRegion;
   $('baudApply').onclick = applyBaud;
   $('gpioRead').onclick = () => readGpio(false);
@@ -1292,7 +1529,7 @@ function init() {
   $('tagsHead').onclick = e => {
     const th = e.target.closest('[data-sort]'); if (!th) return;
     const k = th.dataset.sort;
-    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = ['count', 'rate', 'last'].includes(k) ? -1 : 1; }
+    if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = ['count', 'rate', 'hit', 'last'].includes(k) ? -1 : 1; }
     scheduleRender();
   };
   $('tagsBody').onclick = e => {

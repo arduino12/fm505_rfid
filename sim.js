@@ -2,7 +2,9 @@
 // Replies follow what a real module (firmware D29B) sent on 2026-11-07: <LF>reply<CR><LF> framing,
 // U lists one line per tag then a bare "U", UR appends ",R<data>" or ",<error>", N1/N5 echo the value,
 // R errors come back bare ("3", "E"), and single-tag Q/R mostly fail while several tags answer.
-// window.fm505Sim.unplug() / .replug() simulate pulling the USB cable.
+// Four tags lie in a row 0.5 m apart under an antenna that moves from one to the next; whether a tag
+// answers depends on TX power versus its distance and angle, so Hit % and the power sweep have something to find.
+// window.fm505Sim.unplug() / .replug() simulate pulling the USB cable; .hold(x) parks the antenna at x metres.
 (() => {
   const enc = new TextEncoder();
   const BAUDS = [4800, 9600, 14400, 19200, 38400, 57600, 115200, 230400];
@@ -21,13 +23,30 @@
   const t0 = performance.now();
   const clock = () => performance.now() - t0;
 
-  // the three tags that sat on the real antenna, plus one that wanders in and out every 30 s
-  function makeTag({ pc, epc, tid, user = 0, cap, p, present = () => true }) {
+  // tags recorded on the real module, laid on the ground in a row 0.5 m apart (x in metres). The antenna
+  // hovers 0.3 m above the row and moves from tag to tag, pausing 5 s over each.
+  // sens = TX power level (00-1B, dBm + 2) a tag needs when it sits right under the antenna.
+  function makeTag({ pc, epc, tid, user = 0, cap, x, sens, p = .96 }) {
     const epcBank = ['0000', pc, ...words(epc)];
     while (epcBank.length < 2 + cap) epcBank.push('0000');
-    const tag = { banks: [['0000', '0000', '0000', '0000'], epcBank, words(tid), Array(user).fill('0000')], p, present };
+    const tag = { banks: [['0000', '0000', '0000', '0000'], epcBank, words(tid), Array(user).fill('0000')], x, sens, p, present: () => true };
     fixCrc(tag);
     return tag;
+  }
+  const HEIGHT = 0.3, STOPS = [0, 0.5, 1, 1.5, 1, 0.5], DWELL = 5000, MOVE = 2000;
+  let holdX = null;
+  function antennaX() {
+    if (holdX !== null) return holdX;
+    const leg = DWELL + MOVE, t = clock() % (leg * STOPS.length), i = Math.floor(t / leg), dt = t - i * leg;
+    const a = STOPS[i], b = STOPS[(i + 1) % STOPS.length];
+    if (dt < DWELL) return a;
+    return a + (b - a) * (1 - Math.cos(Math.PI * (dt - DWELL) / MOVE)) / 2;
+  }
+  // power level a tag needs from where the antenna is now: one-way path loss relative to straight below,
+  // plus the patch antenna's falloff off-axis (gain ~ cos^1.5 of the angle from vertical)
+  function wakeLevel(tag) {
+    const d = Math.hypot(antennaX() - tag.x, HEIGHT), cos = HEIGHT / d;
+    return tag.sens + 20 * Math.log10(d / HEIGHT) - 15 * Math.log10(Math.max(cos, .02));
   }
   function fixCrc(tag) {
     const b = tag.banks[1], n = parseInt(b[1], 16) >> 11;
@@ -36,23 +55,23 @@
   const epcOf = tag => { const b = tag.banks[1], n = parseInt(b[1], 16) >> 11; return b.slice(2, 2 + n).join(''); };
   const lineOf = tag => { const b = tag.banks[1]; return b[1] + epcOf(tag) + b[0]; };   // PC+EPC+CRC16
   const tags = [
-    makeTag({ pc: '3400', epc: '745EA4933044A3C15FCDD542', tid: 'E2801190200094A5375A03A7', user: 2, cap: 8, p: .92 }),          // Impinj M750
-    makeTag({ pc: '3400', epc: 'E28011700000021BE1F4AC6F', tid: 'E28011702000046F3E950B7C', user: 4, cap: 6, p: .45 }),          // Impinj Monza R6-P
-    makeTag({ pc: '3000', epc: 'E2806894000040316A83745D', tid: 'E2806894200040316A83745D', user: 8, cap: 8, p: .35 }),          // NXP UCODE 8
-    makeTag({ pc: '3000', epc: '300833B2DDD9014000000000', tid: 'E2003412013AF80012345678', user: 32, cap: 6, p: .8,             // Alien Higgs-3
-      present: () => clock() % 30000 > 8000 && clock() % 30000 < 20000 }),
+    makeTag({ pc: '3400', epc: '745EA4933044A3C15FCDD542', tid: 'E2801190200094A5375A03A7', user: 2, cap: 8, x: 0, sens: 3 }),     // Impinj M750
+    makeTag({ pc: '3400', epc: 'E28011700000021BE1F4AC6F', tid: 'E28011702000046F3E950B7C', user: 4, cap: 6, x: .5, sens: 5 }),    // Impinj Monza R6-P
+    makeTag({ pc: '3000', epc: 'E2806894000040316A83745D', tid: 'E2806894200040316A83745D', user: 8, cap: 8, x: 1, sens: 4 }),     // NXP UCODE 8
+    makeTag({ pc: '3000', epc: '300833B2DDD9014000000000', tid: 'E2003412013AF80012345678', user: 32, cap: 6, x: 1.5, sens: 6 }),  // Alien Higgs-3
   ];
 
   const reader = {
     id: '5153494D', power: 'FF', region: '01', dir: 0, lvl: 0, baudIdx: 4,
     select: null, password: null, busy: Promise.resolve(), buf: '',
   };
-  function strength() {
+  // answer probability: ~0 a couple of dB below the tag's wake level, ~1 a couple of dB above it
+  function answerP(tag) {
     const n = parseInt(reader.power, 16);
-    let f = n <= 0x1B ? Math.min(1, Math.max(.08, (n + 3) / 30)) : 1;
-    if (['04', '05', '0A'].includes(reader.region)) f *= .3;          // antenna is tuned for 902-928 MHz
-    else if (reader.region !== '01') f *= .85;
-    return f;
+    let level = n <= 0x1B ? n : 0x1C;                                  // factory FF behaves like full power
+    if (['04', '05', '0A'].includes(reader.region)) level -= 5;       // antenna is tuned for 902-928 MHz
+    else if (reader.region !== '01') level -= 1;
+    return tag.p / (1 + Math.exp(-(level - wakeLevel(tag) + .5) * 1.2));
   }
   function matches(tag) {
     const s = reader.select;
@@ -61,9 +80,9 @@
     if (s.addr % 4 || s.len % 4) return true;                          // nibble-aligned masks only
     return bits.substr(s.addr / 4, s.len / 4) === s.data.slice(0, s.len / 4);
   }
-  const responders = () => tags.filter(t => t.present() && matches(t) && rnd() < t.p * strength());
+  const responders = () => tags.filter(t => t.present() && matches(t) && rnd() < answerP(t));
   function single() {
-    const r = responders();
+    const r = responders().sort((a, b) => wakeLevel(a) - wakeLevel(b));
     if (r.length === 1) return r[0];
     if (r.length > 1 && rnd() < .25) return r[0];                      // capture effect: strongest wins sometimes
     return null;
@@ -204,5 +223,8 @@
   };
   api.reader = reader;
   api.tags = tags;
+  api.antennaX = antennaX;
+  api.hold = x => { holdX = x ?? null; };                              // park the antenna at x metres; hold() resumes
+  api.wakeLevels = () => tags.map(t => +wakeLevel(t).toFixed(1));
   window.fm505Sim = api;
 })();
